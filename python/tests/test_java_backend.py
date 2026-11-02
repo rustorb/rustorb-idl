@@ -5,7 +5,7 @@ runs it.
 
 Run from the repository root with idl_parser importable::
 
-    PYTHONPATH=path/to/idl_parser python3 -m unittest discover -s crates/rustorb-codegen/python/tests
+    PYTHONPATH=path/to/idl_parser python3 -m unittest discover -s python/tests
 """
 
 import os
@@ -16,13 +16,8 @@ import tempfile
 import textwrap
 import unittest
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.normpath(os.path.join(HERE, "..", "..", "..", ".."))
-CODEGEN = os.path.join(ROOT, "crates", "rustorb-codegen", "python")
-TEST_IDL = os.path.join(ROOT, "crates", "rustorb-codegen", "tests", "idl")
-CPP_IDL = os.path.join(ROOT, "cpp", "tests", "idl")
-INTEROP_IDL = os.path.join(ROOT, "interop", "idl")
-RUNTIME = os.path.join(ROOT, "java", "src", "main", "java")
+from _paths import CODEGEN, CPP_IDL, INTEROP_IDL, TEST_IDL, rustorb  # noqa: E402,F401
+RUNTIME = rustorb("java", "src", "main", "java")
 
 if CODEGEN not in sys.path:
     sys.path.insert(0, CODEGEN)
@@ -30,7 +25,8 @@ if CODEGEN not in sys.path:
 from rustorb_idl import cli  # noqa: E402
 
 OUT = tempfile.mkdtemp(prefix="rustorb-idl-java-test-")
-JAVAC = shutil.which("javac")
+# Compiling the generated code needs the Java runtime of rustorb (RUSTORB_SRC).
+JAVAC = shutil.which("javac") if RUNTIME else None
 
 
 def _javac_release():
@@ -304,7 +300,7 @@ class JavaBackendTest(unittest.TestCase):
         self.assertIn("create_recursive_tc(_id)", later)
         self.assertIn("create_value_tc(_id, \"Later\"", later)
 
-    @unittest.skipUnless(JAVAC, "no javac for Java 22 or later")
+    @unittest.skipUnless(JAVAC, "no javac for Java 22 or later, or no rustorb checkout in RUSTORB_SRC")
     def test_compiles(self):
         sources = []
         for d in (RUNTIME, self.outdir):

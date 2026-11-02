@@ -5,7 +5,7 @@ generator refuses. The generated code itself is compiled and run by
 
 Run from the repository root with idl_parser importable::
 
-    PYTHONPATH=path/to/idl_parser python3 -m unittest discover -s crates/rustorb-codegen/python/tests
+    PYTHONPATH=path/to/idl_parser python3 -m unittest discover -s python/tests
 """
 
 import contextlib
@@ -17,9 +17,7 @@ import tempfile
 import textwrap
 import unittest
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.normpath(os.path.join(HERE, "..", "..", "..", ".."))
-CODEGEN = os.path.join(ROOT, "crates", "rustorb-codegen", "python")
+from _paths import CODEGEN, CPP_IDL, INTEROP_IDL, TEST_IDL, rustorb  # noqa: E402,F401
 
 if CODEGEN not in sys.path:
     sys.path.insert(0, CODEGEN)

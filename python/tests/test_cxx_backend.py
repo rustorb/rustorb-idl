@@ -4,7 +4,7 @@ and the constructs the C++ backend refuses. The generated code is compiled
 
 Run from the repository root with idl_parser importable::
 
-    PYTHONPATH=path/to/idl_parser python3 -m unittest discover -s crates/rustorb-codegen/python/tests
+    PYTHONPATH=path/to/idl_parser python3 -m unittest discover -s python/tests
 """
 
 import os
@@ -15,12 +15,7 @@ import tempfile
 import textwrap
 import unittest
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.normpath(os.path.join(HERE, "..", "..", "..", ".."))
-CODEGEN = os.path.join(ROOT, "crates", "rustorb-codegen", "python")
-TEST_IDL = os.path.join(ROOT, "crates", "rustorb-codegen", "tests", "idl")
-CPP_IDL = os.path.join(ROOT, "cpp", "tests", "idl")
-INTEROP_IDL = os.path.join(ROOT, "interop", "idl")
+from _paths import CODEGEN, CPP_IDL, INTEROP_IDL, TEST_IDL, rustorb  # noqa: E402,F401
 
 if CODEGEN not in sys.path:
     sys.path.insert(0, CODEGEN)
@@ -28,7 +23,8 @@ if CODEGEN not in sys.path:
 from rustorb_idl import cli  # noqa: E402
 
 OUT = tempfile.mkdtemp(prefix="rustorb-idl-cxx-test-")
-CXX = os.environ.get("CXX") or shutil.which("g++") or shutil.which("clang++")
+# Compiling the generated code needs the C++ headers of rustorb (RUSTORB_SRC).
+CXX = (os.environ.get("CXX") or shutil.which("g++") or shutil.which("clang++")) if rustorb() else None
 
 IDLS = [
     os.path.join(CPP_IDL, "CxxMapping.idl"),
@@ -229,8 +225,8 @@ class CxxBackendTest(unittest.TestCase):
                     "-Wall",
                     "-Wextra",
                     "-Werror",
-                    "-I" + os.path.join(ROOT, "cpp", "include"),
-                    "-I" + os.path.join(ROOT, "crates", "rustorb-ffi", "include"),
+                    "-I" + rustorb("cpp", "include"),
+                    "-I" + rustorb("crates", "rustorb-ffi", "include"),
                     "-I" + outdir,
                     os.path.join(outdir, "Abstracts.cc"),
                 ],
@@ -340,15 +336,15 @@ class CxxBackendTest(unittest.TestCase):
                     "-Wall",
                     "-Wextra",
                     "-Werror",
-                    "-I" + os.path.join(ROOT, "cpp", "include"),
-                    "-I" + os.path.join(ROOT, "crates", "rustorb-ffi", "include"),
+                    "-I" + rustorb("cpp", "include"),
+                    "-I" + rustorb("crates", "rustorb-ffi", "include"),
                     "-I" + outdir,
                     os.path.join(outdir, "Values.cc"),
                 ],
                 check=True,
             )
 
-    @unittest.skipUnless(CXX, "no C++ compiler")
+    @unittest.skipUnless(CXX, "no C++ compiler, or no rustorb checkout in RUSTORB_SRC")
     def test_compiles(self):
         for base in ("CxxMapping", "CosNaming", "InteropTest", "AnyTest"):
             with self.subTest(base):
@@ -360,8 +356,8 @@ class CxxBackendTest(unittest.TestCase):
                         "-Wall",
                         "-Wextra",
                         "-Werror",
-                        "-I" + os.path.join(ROOT, "cpp", "include"),
-                        "-I" + os.path.join(ROOT, "crates", "rustorb-ffi", "include"),
+                        "-I" + rustorb("cpp", "include"),
+                        "-I" + rustorb("crates", "rustorb-ffi", "include"),
                         "-I" + self.outdir,
                         os.path.join(self.outdir, base + ".cc"),
                     ],

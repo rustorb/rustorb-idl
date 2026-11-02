@@ -3,7 +3,7 @@ use it with the rustorb runtime (``python/rustorb``).
 
 Run from the repository root with idl_parser importable::
 
-    PYTHONPATH=path/to/idl_parser python3 -m unittest discover -s crates/rustorb-codegen/python/tests
+    PYTHONPATH=path/to/idl_parser python3 -m unittest discover -s python/tests
 """
 
 import importlib.util
@@ -15,12 +15,11 @@ import tempfile
 import textwrap
 import unittest
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-ROOT = os.path.normpath(os.path.join(HERE, "..", "..", "..", ".."))
-CODEGEN = os.path.join(ROOT, "crates", "rustorb-codegen", "python")
-RUNTIME = os.path.join(ROOT, "python")
-TEST_IDL = os.path.join(ROOT, "crates", "rustorb-codegen", "tests", "idl")
-INTEROP_IDL = os.path.join(ROOT, "interop", "idl")
+from _paths import CODEGEN, CPP_IDL, INTEROP_IDL, TEST_IDL, rustorb  # noqa: E402,F401
+RUNTIME = rustorb("python")
+if RUNTIME is None:
+    # The generated code is imported and run against the rustorb package.
+    raise unittest.SkipTest("needs the rustorb runtime: set RUSTORB_SRC to a rustorb checkout")
 
 for p in (CODEGEN, RUNTIME):
     if p not in sys.path:
@@ -687,11 +686,11 @@ class DumpTest(unittest.TestCase):
     the omniORBpy one only as interop/README.md says)."""
 
     def test_dump(self):
-        expected = os.path.join(ROOT, "interop", "expected", "pymapping-rustorb.txt")
+        expected = rustorb("interop", "expected", "pymapping-rustorb.txt")
         r = subprocess.run(
             [
                 sys.executable,
-                os.path.join(ROOT, "interop", "scripts", "pymapping-dump"),
+                rustorb("interop", "scripts", "pymapping-dump"),
                 "--runtime",
                 "rustorb",
             ]

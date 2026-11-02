@@ -2,19 +2,19 @@
 
 Oct 28, 2026 · @ysuga · M1
 
-IDL から rustorb の Python バインディング向けのコードを生成する `rustorb-idl -bpython` の構成と、生成コードとランタイムの取り決めをまとめる。M1 の完了条件は「omniidl -bpython と同じ公開APIのコードを生成できること」で、`interop/run-pymapping-check.sh` で omniORBpy 上の実測と比べて判定する。実際の呼び出し（マーシャリング、POA への登録）は M3 の PyO3 バインディング（[python-binding.md](python-binding.md)）でつないだ。
+IDL から rustorb の Python バインディング向けのコードを生成する `rustorb-idl -bpython` の構成と、生成コードとランタイムの取り決めをまとめる。M1 の完了条件は「omniidl -bpython と同じ公開APIのコードを生成できること」で、`interop/run-pymapping-check.sh` で omniORBpy 上の実測と比べて判定する。実際の呼び出し（マーシャリング、POA への登録）は M3 の PyO3 バインディング（[python-binding.md](https://github.com/rustorb/rustorb/blob/main/docs/python-binding.md)）でつないだ。
 
 ## 決定事項
 
 - **生成器は Python で書く**（2026-10-28）。idl\_parser が Python 製で、どちらの案でも生成時に Python と idl\_parser が要るため、JSON の中間表現を挟んで Rust で書く利点は小さい。idl\_parser のオブジェクトを直接使い、omniidl と同じ構成で書く。Rust/C++/Java の生成器も同じパッケージにバックエンドとして足す
-- 置き場所は `crates/rustorb-codegen/python/rustorb_idl/`（GPL-3.0-or-later）。`pip install ./crates/rustorb-codegen/python` で `rustorb-idl` コマンドが入る。idl\_parser は修正を含むコミットに固定する
-- 生成コードが呼ぶランタイムは `python/rustorb/` の `rustorb` パッケージ（MIT OR Apache-2.0）。純 Python の部分（`CORBA`、`PortableServer`、`_types`、`_rt`）と、M3 で足したネイティブモジュール（[python-binding.md](python-binding.md)）
+- 置き場所は `python/rustorb_idl/`（GPL-3.0-or-later）。`pip install ./python` で `rustorb-idl` コマンドが入る。idl\_parser は修正を含むコミットに固定する
+- 生成コードが呼ぶランタイムは rustorb の `python/rustorb/` にある `rustorb` パッケージ（MIT OR Apache-2.0）。純 Python の部分（`CORBA`、`PortableServer`、`_types`、`_rt`）と、M3 で足したネイティブモジュール（[python-binding.md](https://github.com/rustorb/rustorb/blob/main/docs/python-binding.md)）
 - 互換は omniidl -bpython の**公開API**に合わせる。omniORBpy の内部表現（操作や型の記述子の形式）は見ず、写さない。型の情報は CORBA の TypeCode そのもので持つ
 
 ## 使い方
 
 ```sh
-pip install ./crates/rustorb-codegen/python
+pip install ./python
 rustorb-idl -bpython [-I DIR] [-D NAME[=VALUE]] [-C OUTDIR] FILE.idl...
 ```
 
@@ -68,14 +68,14 @@ rustorb-idl -bpython [-I DIR] [-D NAME[=VALUE]] [-C OUTDIR] FILE.idl...
 - `CORBA.fixed("12.50")` は末尾の0を落とし、3桁・小数1桁になる。`value()` は 10 の小数桁乗をかけた整数
 - ローカルインターフェース・抽象インターフェースもスタブとスケルトンを持つ
 
-意図的に仕様に従った差は4点で、[interop/README.md](../interop/README.md#python-mapping-check) に挙げた（ローカルインターフェースの TypeCode の種類、TypeCode のメンバー名、`TC_Object` のリポジトリID、fixed の typedef のクラス）。
+意図的に仕様に従った差は4点で、[interop/README.md](https://github.com/rustorb/rustorb/blob/main/interop/README.md#python-mapping-check) に挙げた（ローカルインターフェースの TypeCode の種類、TypeCode のメンバー名、`TC_Object` のリポジトリID、fixed の typedef のクラス）。
 
 ## idl\_parser について
 
 - オペレーションの戻り値が `unsigned long` など複数語の型だと構文エラーになっていた（[idl\_parser#159](https://github.com/sugarsweetrobotics/idl_parser/issues/159)）。idl\_parser 側で修正され、生成器の回避策は外した
 - omniidl は IDL の名前の衝突（メンバー名と型名の大文字小文字違い、`apple` と `APPLE` など）をエラーにするが、idl\_parser は通す。生成器は通ったものをそのまま生成する
-- eventtype・map・bitset・bitmask はまだ生成しない（エラーにする）。valuetype は [valuetype.md](valuetype.md)
+- eventtype・map・bitset・bitmask はまだ生成しない（エラーにする）。valuetype は [valuetype.md](https://github.com/rustorb/rustorb/blob/main/docs/valuetype.md)
 
 ## 残り
 
-- ネイティブモジュール（`ORB_init`、`_invoke`、POA と `_this()`、スケルトンへの振り分け）と、生成コードを使った相互接続は M3 で入れた（[python-binding.md](python-binding.md)）
+- ネイティブモジュール（`ORB_init`、`_invoke`、POA と `_this()`、スケルトンへの振り分け）と、生成コードを使った相互接続は M3 で入れた（[python-binding.md](https://github.com/rustorb/rustorb/blob/main/docs/python-binding.md)）
