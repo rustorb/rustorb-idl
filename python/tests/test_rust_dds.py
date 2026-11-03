@@ -212,5 +212,66 @@ class GeneratorTest(unittest.TestCase):
         self.assertIn("pub const FLAG_B: B = B(1 << 9);", text)
 
 
+
+class XTypesTest(unittest.TestCase):
+    """``-Wbxtypes``: the DDS-XTypes descriptions. rustorb-dds compiles the
+    output for its fixtures and checks the TypeObjects built from it against
+    those of Cyclone DDS (crates/rustorb-xtypes/tests/cyclonedds.rs)."""
+
+    IDL = """
+        module A {
+            typedef sequence<long, 3> Longs;
+            enum E { X, @default_literal Y };
+        };
+        module B {
+            @appendable struct S {
+                @key long id;
+                A::Longs l;
+                A::E e;
+                @hashid("h") long hashed;
+                long grid[2][3];
+            };
+            union U switch (A::E) { case A::X: long x; default: string s; };
+        };
+        """
+
+    def test_descriptions(self):
+        status, err, text = run(self.IDL, "-Wbdds_only", "-Wbxtypes")
+        self.assertEqual(status, 0, err)
+        for name in ("E", "S", "U"):
+            self.assertIn("impl ::rustorb_xtypes::types::DescribeType for %s {" % name, text)
+        self.assertIn("pub fn __xtypes_Longs() -> ::rustorb_xtypes::types::Type {", text)
+        self.assertIn("super::a::__xtypes_Longs()", text)
+        self.assertIn('name: "B::S".into(),', text)
+        self.assertIn("dimensions: vec![2, 3]", text)
+        self.assertIn('hash_id: Some("h".into())', text)
+        self.assertIn('name: "Y".into(), value: 1, default: true', text)
+        # Labels are the values of the enumerators.
+        self.assertIn('::new("x", 0, ::rustorb_xtypes::types::Type::Primitive(', text)
+        self.assertIn("vec![0])", text)
+
+    def test_only_with_the_option(self):
+        status, err, text = run(self.IDL, "-Wbdds_only")
+        self.assertEqual(status, 0, err)
+        self.assertNotIn("rustorb_xtypes", text)
+
+    def test_path(self):
+        status, err, text = run(self.IDL, "-Wbdds_only", "-Wbxtypes=crate::xt")
+        self.assertEqual(status, 0, err)
+        self.assertIn("impl crate::xt::types::DescribeType for S {", text)
+
+    def test_needs_dds(self):
+        status, err, _ = run(self.IDL, "-Wbxtypes")
+        self.assertEqual(status, 2)
+        self.assertIn("needs -Wbdds", err)
+
+    def test_recursive_types_are_refused(self):
+        status, err, _ = run("struct Node { long v; sequence<Node> next; };", "-Wbdds_only", "-Wbxtypes")
+        self.assertEqual(status, 1)
+        self.assertIn("depends on itself", err)
+        status, err, _ = run("struct Node { long v; sequence<Node> next; };", "-Wbdds_only")
+        self.assertEqual(status, 0, err)
+
+
 if __name__ == "__main__":
     unittest.main()

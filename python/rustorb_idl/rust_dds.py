@@ -321,6 +321,8 @@ class DdsMixin(object):
         w("}")
         w()
         self.dds_topic(w, node, name, kind, bool(keys))
+        if self.opt.xtypes:
+            self.xtypes_struct(w, node, cur, name, members, kind)
 
     def dds_topic(self, w, node, name, kind, keyed):
         if fe.is_nested(node):
@@ -461,6 +463,8 @@ class DdsMixin(object):
         w("}")
         w()
         self.dds_topic(w, node, name, kind, False)
+        if self.opt.xtypes:
+            self.xtypes_union(w, node, cur, name, disc, cases, default_index, kind)
 
     # -- enums -----------------------------------------------------------
 
@@ -522,6 +526,8 @@ class DdsMixin(object):
         w.dedent()
         w("}")
         w()
+        if self.opt.xtypes:
+            self.xtypes_enum(w, node, name, bits)
 
     # -- bitmasks --------------------------------------------------------
 
@@ -601,6 +607,266 @@ class DdsMixin(object):
         w.dedent()
         w("}")
         w()
+        if self.opt.xtypes:
+            self.xtypes_bitmask(w, node, name, bits)
+
+    # -- DDS-XTypes descriptions (-Wbxtypes) ---------------------------------
+    #
+    # Each struct, union, enum and bitmask gets an impl of
+    # rustorb_xtypes::types::DescribeType, and each typedef a function, that
+    # return its description (rustorb_xtypes::types::Type), from which
+    # rustorb-xtypes builds the TypeObjects. The description is built once
+    # and shared, so that a type used in several places is one type.
+
+    @property
+    def XT(self):
+        return self.opt.xtypes + "::types"
+
+    def xtypes_once(self, w, header, body):
+        """``header { <cached body> }``: a function returning the
+        description that ``body`` (a list of lines) builds."""
+        XT = self.XT
+        w(header + " {")
+        w.indent()
+        w("static TYPE: ::std::sync::OnceLock<%s::Type> = ::std::sync::OnceLock::new();" % XT)
+        w("TYPE.get_or_init(|| {")
+        w.indent()
+        for line in body:
+            w(line)
+        w.dedent()
+        w("})")
+        w(".clone()")
+        w.dedent()
+        w("}")
+
+    def xtypes_impl(self, w, node, name, body):
+        self.xtypes_check_cycle(node)
+        w("impl %s::DescribeType for %s {" % (self.XT, name))
+        w.indent()
+        self.xtypes_once(w, "fn describe_type() -> %s::Type" % self.XT, body)
+        w.dedent()
+        w("}")
+        w()
+
+    def xtypes_typedef(self, w, node, cur, name, t):
+        self.xtypes_check_cycle(node)
+        w("/// The DDS-XTypes description of the typedef `%s`." % name)
+        w("#[doc(hidden)]")
+        w("#[allow(non_snake_case)]")
+        body = [
+            "%s::Type::from(%s::AliasType {" % (self.XT, self.XT),
+            "    name: %s.into()," % _rust_str(_qualified(node)),
+            "    related: %s," % self.xtypes_expr(t, cur, node),
+            "})",
+        ]
+        self.xtypes_once(w, "pub fn %s() -> %s::Type" % (xtypes_typedef_fn(name), self.XT), body)
+        w()
+
+    def xtypes_extensibility(self, kind):
+        return "%s::Extensibility::%s" % (self.XT, kind.capitalize())
+
+    def xtypes_expr(self, t, cur, where, external=False):
+        """A Rust expression for the description of the type ``t``."""
+        XT = self.XT
+        k = t.kind
+        if k in XTYPES_PRIMITIVE:
+            return "%s::Type::Primitive(%s::Primitive::%s)" % (XT, XT, XTYPES_PRIMITIVE[k])
+        if k in ("string", "wstring"):
+            return "%s::Type::String { wide: %s, bound: %d }" % (
+                XT, "true" if k == "wstring" else "false", t.bound or 0)
+        if k == "sequence":
+            return "%s::Type::Sequence(::std::sync::Arc::new(%s::SequenceType { element: %s::Element::new(%s), bound: %d }))" % (
+                XT, XT, XT, self.xtypes_expr(t.content, cur, where), t.bound or 0)
+        if k == "array":
+            dims = [t.length]
+            content = t.content
+            while content.kind == "array":
+                dims.append(content.length)
+                content = content.content
+            return "%s::Type::Array(::std::sync::Arc::new(%s::ArrayType { element: %s::Element::new(%s), dimensions: vec![%s] }))" % (
+                XT, XT, XT, self.xtypes_expr(content, cur, where), ", ".join(str(d) for d in dims))
+        if k == "bitmask":
+            return "<%s as %s::DescribeType>::describe_type()" % (self.ref(t.node, cur), XT)
+        if k == "named":
+            n = self.full(t.node)
+            if fe.is_typedef(n):
+                path = self.ref(n, cur)
+                head, sep, last = path.rpartition("::")
+                return "%s%s%s()" % (head, sep, xtypes_typedef_fn(last))
+            return "<%s as %s::DescribeType>::describe_type()" % (self.ref(n, cur), XT)
+        raise fe.GeneratorError("no DDS-XTypes description for %r" % t, where)
+
+    def xtypes_struct(self, w, node, cur, name, members, kind):
+        XT = self.XT
+        TO = self.opt.xtypes + "::type_object"
+        mode = fe.autoid(node)
+        body = [
+            "%s::Type::from(%s::StructType {" % (XT, XT),
+            "    name: %s.into()," % _rust_str(_qualified(node)),
+            "    extensibility: %s," % self.xtypes_extensibility(kind),
+            "    nested: %s," % _bool(fe.is_nested(node)),
+            "    autoid_hash: %s," % _bool(mode == "hash"),
+            "    base: None,",
+            "    members: vec![",
+        ]
+        for m in members:
+            ty = self.xtypes_expr(m.type, cur, node)
+            hashid = fe.annotation(m.node, "hashid")
+            body.append("        %s::StructMember {" % XT)
+            body.append("            key: %s," % _bool(m.key))
+            body.append("            optional: %s," % _bool(m.optional))
+            body.append("            must_understand: %s," % _bool(m.must_understand))
+            body.append("            external: %s," % _bool(m.external))
+            if hashid is not None:
+                body.append(
+                    "            annotations: %s::AppliedBuiltinMemberAnnotations { hash_id: Some(%s.into()), ..::std::default::Default::default() },"
+                    % (TO, _rust_str(fe._string_arg(hashid) or "")))
+            body.append("            ..%s::StructMember::new(%s, %d, %s)" % (XT, _rust_str(m.node.name), m.id, ty))
+            body.append("        },")
+        body.append("    ],")
+        body.append("})")
+        self.xtypes_impl(w, node, name, body)
+
+    def xtypes_union(self, w, node, cur, name, disc, cases, default_index, kind):
+        XT = self.XT
+        ids = fe.member_ids(node, list(node.members))
+        rdisc = disc.resolved()
+
+        def label_value(l):
+            if rdisc.kind == "named" and fe.is_enum(rdisc.node):
+                for v in rdisc.node.values:
+                    if v.name == l.name:
+                        return v.value
+                raise fe.GeneratorError("unknown label %s" % l.name, node)
+            if rdisc.kind == "boolean":
+                return 1 if l else 0
+            if rdisc.kind in ("char", "wchar"):
+                return ord(l) if isinstance(l, str) else int(l)
+            return int(l)
+
+        body = [
+            "%s::Type::from(%s::UnionType {" % (XT, XT),
+            "    name: %s.into()," % _rust_str(_qualified(node)),
+            "    extensibility: %s," % self.xtypes_extensibility(kind),
+            "    nested: %s," % _bool(fe.is_nested(node)),
+            "    autoid_hash: %s," % _bool(fe.autoid(node) == "hash"),
+            "    discriminator: %s," % self.xtypes_expr(disc, cur, node),
+            "    discriminator_key: false,",
+            "    discriminator_try_construct: ::std::default::Default::default(),",
+            "    members: vec![",
+        ]
+        for i, ((ls, m, t), mid) in enumerate(zip(cases, ids)):
+            labels = ", ".join(str(label_value(l)) for l in ls)
+            body.append("        %s::UnionMember {" % XT)
+            body.append("            default: %s," % _bool(i == default_index))
+            body.append("            ..%s::UnionMember::new(%s, %d, %s, vec![%s])" % (
+                XT, _rust_str(m), mid, self.xtypes_expr(t, cur, node), labels))
+            body.append("        },")
+        body.append("    ],")
+        body.append("})")
+        self.xtypes_impl(w, node, name, body)
+
+    def xtypes_enum(self, w, node, name, bits):
+        XT = self.XT
+        body = [
+            "%s::Type::from(%s::EnumType {" % (XT, XT),
+            "    name: %s.into()," % _rust_str(_qualified(node)),
+            "    bit_bound: %d," % bits,
+            "    extensibility: %s," % self.xtypes_extensibility(fe.extensibility(node, "final")),
+            "    literals: vec![",
+        ]
+        for v, (vname, value) in zip(node.values, self.enum_values(node)):
+            body.append("        %s::EnumLiteral { name: %s.into(), value: %d, default: %s }," % (
+                XT, _rust_str(vname), value, _bool(fe.annotation(v, "default_literal") is not None)))
+        body.append("    ],")
+        body.append("})")
+        self.xtypes_impl(w, node, name, body)
+
+    def xtypes_bitmask(self, w, node, name, bits):
+        XT = self.XT
+        body = [
+            "%s::Type::from(%s::BitmaskType {" % (XT, XT),
+            "    name: %s.into()," % _rust_str(_qualified(node)),
+            "    bit_bound: %d," % bits,
+            "    extensibility: %s," % self.xtypes_extensibility(fe.extensibility(node, "final")),
+            "    flags: vec![",
+        ]
+        for v in node.values:
+            body.append("        %s::Bitflag { name: %s.into(), position: %d }," % (XT, _rust_str(v.name), v.position))
+        body.append("    ],")
+        body.append("})")
+        self.xtypes_impl(w, node, name, body)
+
+    def xtypes_check_cycle(self, node):
+        """Types that depend on themselves are refused: rustorb-xtypes does
+        not build their TypeObjects yet (DDS-XTypes 7.3.4.8)."""
+        start = self.full(node)
+        seen = set()
+        todo = list(self.xtypes_deps(start))
+        while todo:
+            n = todo.pop()
+            if n is start:
+                raise fe.GeneratorError(
+                    "%s depends on itself, which -Wbxtypes does not support yet" % node.name, node)
+            if id(n) in seen:
+                continue
+            seen.add(id(n))
+            todo.extend(self.xtypes_deps(n))
+
+    def xtypes_deps(self, n):
+        """The named types the definition ``n`` refers to."""
+        types = []
+        if fe.is_typedef(n):
+            types.append(fe.type_of(n.type, n))
+        elif fe.is_struct(n):
+            types.extend(fe.type_of(m.type, m) for m in n.members)
+        elif fe.is_union(n):
+            types.append(fe.type_of(n.discriminator_type, n))
+            types.extend(fe.type_of(m.type, m) for m in n.members)
+        out = []
+        while types:
+            t = types.pop()
+            if t.kind in ("sequence", "array"):
+                types.append(t.content)
+            elif t.kind == "named":
+                out.append(self.full(t.node))
+        return out
+
+
+XTYPES_PRIMITIVE = {
+    "boolean": "Boolean",
+    "octet": "Byte",
+    "int8": "Int8",
+    "uint8": "Uint8",
+    "short": "Int16",
+    "ushort": "Uint16",
+    "long": "Int32",
+    "ulong": "Uint32",
+    "longlong": "Int64",
+    "ulonglong": "Uint64",
+    "float": "Float32",
+    "double": "Float64",
+    "longdouble": "Float128",
+    "char": "Char8",
+    "wchar": "Char16",
+}
+
+
+def xtypes_typedef_fn(name):
+    """The function that describes the typedef ``name`` (-Wbxtypes)."""
+    return "__xtypes_" + name
+
+
+def _qualified(node):
+    return "::".join(fe.scope_path(node))
+
+
+def _bool(b):
+    return "true" if b else "false"
+
+
+def _rust_str(s):
+    return '"%s"' % s.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _snake_op(trait):
