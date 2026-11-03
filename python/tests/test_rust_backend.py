@@ -75,7 +75,7 @@ class RustBackendTest(unittest.TestCase):
         # Rust keywords are raw identifiers, and self gets a suffix.
         self.assertIn("pub r#type: i32,", text)
         self.assertIn("pub self_: bool,", text)
-        self.assertIn("pub camel_case_name: String,", text)
+        self.assertIn("pub camel_case_name: ::std::string::String,", text)
         self.assertIn("pub const C_ENUM: Fruit = Fruit::Banana;", text)
         self.assertIn("pub const MAX_COUNT: i32 = 5;", text)
         self.assertIn("CherryPie", text)
@@ -117,7 +117,7 @@ class RustBackendTest(unittest.TestCase):
         self.assertEqual(cli.main(args + ["-C", outdir, path]), 0)
         self.assertEqual(os.listdir(outdir), ["any_test_hidden.rs"])
         text = read(os.path.join(outdir, "any_test_hidden.rs"))
-        self.assertIn("pub type PointSeq = Vec<crate::any::Point>;", text)
+        self.assertIn("pub type PointSeq = ::std::vec::Vec<crate::any::Point>;", text)
         self.assertNotIn("pub mod any_test {", text)
         self.assertIn("::core_alias::idl::", text)
         self.assertNotIn("::rustorb_core", text)

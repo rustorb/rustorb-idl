@@ -134,9 +134,26 @@ class GeneratorTest(unittest.TestCase):
         self.assertEqual(status, 0, err)
         self.assertNotIn("rustorb_core", text)
         self.assertIn("const _: () = ::rustorb_typesupport::GENERATED_CODE_VERSION_1;", text)
-        self.assertIn("pub s: Option<String>,", text)
+        self.assertIn("pub s: ::std::option::Option<::std::string::String>,", text)
         self.assertIn("impl ::rustorb_typesupport::TopicType for S {", text)
         self.assertIn("const KEYED: bool = true;", text)
+
+    def test_a_type_named_like_a_std_type(self):
+        # ROS 2's std_msgs/msg/String on DDS: `String_` maps to the Rust
+        # name `String`, so the members name the standard types by their
+        # full path.
+        idl = """
+            module std_msgs { module msg { module dds_ {
+                struct String_ { string data; sequence<string> more; @optional string maybe; };
+            }; }; };
+            """
+        status, err, text = run(idl, "-Wbdds_only")
+        self.assertEqual(status, 0, err)
+        self.assertIn("pub struct String {", text)
+        self.assertIn("pub data: ::std::string::String,", text)
+        self.assertIn("pub more: ::std::vec::Vec<::std::string::String>,", text)
+        self.assertIn("pub maybe: ::std::option::Option<::std::string::String>,", text)
+        self.assertIn('const TYPE_NAME: &\'static str = "std_msgs::msg::dds_::String_";', text)
 
     def test_dds_adds_to_the_corba_code(self):
         status, err, text = run("struct S { @key long id; };", "-Wbdds")
