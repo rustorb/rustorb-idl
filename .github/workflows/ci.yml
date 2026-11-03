@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # The generator reads IDL with idl_parser, pinned to a tested commit.
+  IDL_PARSER_REF: 5eef768bb61e0ee7c5cd08c42c45789a45585f60
+
+jobs:
+  generator:
+    name: Generator (Python ${{ matrix.python }})
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.13"]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: sugarsweetrobotics/idl_parser
+          ref: ${{ env.IDL_PARSER_REF }}
+          path: idl_parser
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      # The golden Rust output goes through rustfmt.
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: tools/set-version.py --check
+      # Without RUSTORB_SRC: the generator on its own and the golden test.
+      - run: python -m unittest discover -s python/tests -v
+        env:
+          PYTHONPATH: ${{ github.workspace }}/idl_parser
+      - name: Check that tests/golden is what tools/update-golden.py writes
+        run: |
+          tools/update-golden.py
+          git diff --exit-code -- tests/golden
+          test -z "$(git status --porcelain -- tests/golden)"
+        env:
+          IDL_PARSER_DIR: ${{ github.workspace }}/idl_parser
+      - run: pip wheel ./python --no-deps -w dist
+
+  with-rustorb:
+    name: Generated code against rustorb main
+    # The tests that compile and run the generated code, with the runtimes
+    # of rustorb's main branch (RUSTORB_SRC). A change of the generated code
+    # that needs a runtime change fails here until rustorb has it.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: sugarsweetrobotics/idl_parser
+          ref: ${{ env.IDL_PARSER_REF }}
+          path: idl_parser
+      - uses: actions/checkout@v4
+        with:
+          repository: rustorb/rustorb
+          path: rustorb
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "22"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - run: pip install mypy==1.13.0
+      - run: python -m unittest discover -s python/tests -v
+        env:
+          PYTHONPATH: ${{ github.workspace }}/idl_parser
+          RUSTORB_SRC: ${{ github.workspace }}/rustorb
+
+  rust:
+    name: rustorb-codegen
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: rust
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy, rustfmt
+      - uses: dtolnay/rust-toolchain@1.85
+      - run: cargo +stable fmt --check
+      - run: cargo +stable clippy --all-targets -- -D warnings
+      - run: cargo +1.85 test
+      - run: cargo +stable package

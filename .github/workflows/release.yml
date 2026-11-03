@@ -1,0 +1,155 @@
+name: Release
+
+# Publishes the generator (docs/release.md).
+#
+# - a tag v0.3.0 (the version of tools/set-version.py --check): builds the
+#   rustorb-idl wheel and sdist and the rustorb-codegen crate, attaches them
+#   to a draft GitHub Release, publishes rustorb-codegen to crates.io and
+#   rustorb-idl to PyPI, and then publishes the GitHub Release. The
+#   publishing jobs run in the `release` environment (its protection rules
+#   can require an approval) and need the CARGO_REGISTRY_TOKEN secret and a
+#   PyPI trusted publisher for this repository (or the PYPI_API_TOKEN
+#   secret). Run again after a failure, they skip what is already published.
+# - Run workflow (workflow_dispatch), or a pull request that changes the
+#   packaging: only builds, the artifacts stay on the run
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/release.yml
+      - tools/set-version.py
+      - rust/Cargo.toml
+      - python/pyproject.toml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check that every package has the version of the tag
+        id: v
+        run: |
+          version=$(python3 tools/set-version.py --check)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if [ "$GITHUB_REF_TYPE" = tag ] && [ "$GITHUB_REF_NAME" != "v$version" ]; then
+            echo "::error::tag $GITHUB_REF_NAME does not match the version $version"
+            exit 1
+          fi
+
+  build:
+    needs: version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - run: |
+          python -m pip install build
+          python -m build --outdir dist python
+      - name: Install rustorb-idl from the wheel (idl_parser from PyPI) and run it
+        run: |
+          python -m pip install dist/rustorb_idl-*.whl
+          mkdir -p "$RUNNER_TEMP/gen"
+          rustorb-idl --version
+          rustorb-idl -bpython -C "$RUNNER_TEMP/gen" "$(rustorb-idl --idl-dir)/CosNaming.idl"
+      - run: cargo package --manifest-path rust/Cargo.toml
+      - run: cp rust/target/package/rustorb-codegen-*.crate dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/*
+
+  draft:
+    if: github.ref_type == 'tag'
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: Create or update the draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          notes="rustorb-idl ${TAG#v}: see CHANGELOG.md"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+          else
+            gh release create "$TAG" dist/* --draft --verify-tag --repo "$GITHUB_REPOSITORY" \
+              --title "rustorb-idl $TAG" --notes "$notes"
+          fi
+
+  crates-io:
+    if: github.ref_type == 'tag'
+    needs: [version, draft]
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Publish rustorb-codegen
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          if [ -z "$CARGO_REGISTRY_TOKEN" ]; then
+            echo "::error::the CARGO_REGISTRY_TOKEN secret is not set (docs/release.md)"
+            exit 1
+          fi
+          status=$(curl -s -o /dev/null -w '%{http_code}' -A "rustorb-idl-release (github.com/rustorb/rustorb-idl)" \
+            "https://crates.io/api/v1/crates/rustorb-codegen/$VERSION")
+          if [ "$status" = 200 ]; then
+            echo "rustorb-codegen $VERSION is already on crates.io"
+          else
+            cargo publish --manifest-path rust/Cargo.toml
+          fi
+
+  pypi:
+    if: github.ref_type == 'tag'
+    needs: [version, draft]
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: all
+      - run: mkdir dist && mv all/*.whl all/*.tar.gz dist/ && ls -l dist
+      # Trusted publishing (OpenID Connect) when PYPI_API_TOKEN is not set.
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          skip-existing: true
+
+  publish-release:
+    if: github.ref_type == 'tag'
+    needs: [crates-io, pypi]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish the GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

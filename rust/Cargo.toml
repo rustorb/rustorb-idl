@@ -1,0 +1,22 @@
+[package]
+name = "rustorb-codegen"
+description = "IDL code generator for rustorb (Rust, Python, C++11 and Java), for build scripts"
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.85"
+# The generator builds on idl_parser (GPL-3.0-or-later). Generated code is
+# not covered, and a build dependency on this crate does not make the crate
+# that uses it GPL.
+license = "GPL-3.0-or-later"
+repository = "https://github.com/rustorb/rustorb-idl"
+homepage = "https://github.com/rustorb/rustorb"
+keywords = ["corba", "idl", "codegen", "dds", "orb"]
+categories = ["development-tools::build-utils"]
+readme = "README.md"
+
+[lints.rust]
+unsafe_op_in_unsafe_fn = "deny"
+missing_debug_implementations = "warn"
+
+[lints.clippy]
+all = { level = "warn", priority = -1 }
