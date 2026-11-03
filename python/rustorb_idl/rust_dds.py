@@ -171,9 +171,9 @@ class DdsMixin(object):
         if self.corba:
             return rt
         if fe.is_external(node):
-            rt = "Box<%s>" % rt
+            rt = "::std::boxed::Box<%s>" % rt
         if fe.is_optional(node):
-            rt = "Option<%s>" % rt
+            rt = "::std::option::Option<%s>" % rt
         return rt
 
     def dds_field_props(self, node, t, seen):

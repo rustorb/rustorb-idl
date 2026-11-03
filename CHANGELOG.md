@@ -13,6 +13,15 @@ rustorb/rustorb; see its CHANGELOG.md for them.
   output against `tests/golden/`; the tests that compile and run the
   generated code need a rustorb checkout (`RUSTORB_SRC`)
 
+### Fixed
+
+- Rust: members of type `string`, `sequence`, `@optional` and `@external`,
+  and object references, name the standard types by their full path
+  (`::std::string::String`, `::std::vec::Vec`, `::std::option::Option`,
+  `::std::boxed::Box`). An IDL type that maps to one of those names, such
+  as ROS 2's `std_msgs::msg::dds_::String_` (Rust `String`), shadowed the
+  standard type in its module, and the generated code did not compile.
+
 ## [0.2.0] - 2026-11-02
 
 Released from rustorb/rustorb (tag v0.2.0).
