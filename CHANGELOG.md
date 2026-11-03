@@ -6,6 +6,14 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ## [Unreleased]
 
+### Added
+
+- Rust: `-Wbxtypes[=PATH]` describes the DDS types (structs, unions, enums,
+  bitmasks, typedefs) for DDS-XTypes, with impls of
+  `rustorb_xtypes::types::DescribeType` from which rustorb-dds builds their
+  TypeObjects (rustorb/rustorb-dds#31). Types that depend on themselves are
+  refused for now.
+
 ### Changed
 
 - The generator moved from `crates/rustorb-codegen` of rustorb/rustorb to this

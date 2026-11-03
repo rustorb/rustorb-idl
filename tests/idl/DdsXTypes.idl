@@ -1,0 +1,23 @@
+// The DDS-XTypes descriptions of rustorb-idl -Wbxtypes (golden test).
+// rustorb-dds compiles this kind of output and checks the TypeObjects built
+// from it against those of Cyclone DDS.
+module A {
+    typedef sequence<long, 3> Longs;
+    typedef string<20> Name;
+    enum E { X, @default_literal Y };
+    @bit_bound(8) bitmask Flags { F1, @position(5) F2 };
+};
+module B {
+    @appendable struct S {
+        @key long id;
+        A::Longs l;
+        A::E e;
+        A::Flags f;
+        @hashid("h") long hashed;
+        @optional A::Name n;
+        long grid[2][3];
+        sequence<string, 300> names;
+    };
+    @mutable @autoid(HASH) struct M { long a; @external S s; };
+    @final union U switch (A::E) { case A::X: long x; default: string s; };
+};

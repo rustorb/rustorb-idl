@@ -206,6 +206,9 @@ class Options(object):
         self.typesupport = "::rustorb_typesupport"
         # The extensibility of types without an annotation for it.
         self.extensibility = "appendable"
+        # The path of rustorb-xtypes, to describe the DDS types for
+        # DDS-XTypes (-Wbxtypes), or None.
+        self.xtypes = None
 
 
 class Writer(cxx_backend.Writer):
@@ -1126,6 +1129,8 @@ class RustBackend(DdsMixin):
         self.doc(w, node, "IDL typedef")
         w("pub type %s = %s;" % (name, self.rtype(t, cur, node)))
         w()
+        if self.dds and self.opt.xtypes:
+            self.xtypes_typedef(w, node, cur, name, t)
 
     # -- structs and exceptions ------------------------------------------
 
