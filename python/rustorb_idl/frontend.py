@@ -663,6 +663,13 @@ def bit_bound(node, default, lo, hi):
 
 _AMI_PREFIX = "AMI_"
 
+#: The standard IDL files that come with rustorb-idl (``rustorb-idl
+#: --idl-dir``).
+IDL_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "idl")
+#: ``Messaging.idl`` of :data:`IDL_DIR`, whose definitions the runtimes
+#: provide (the Python ``rustorb.Messaging``).
+MESSAGING_IDL = os.path.join(IDL_DIR, "Messaging.idl")
+
 
 def ami_interfaces(root):
     """The interfaces that get an AMI handler: every interface of ``root``
@@ -736,6 +743,84 @@ def _all_operations(iface):
     return members
 
 
+def _interface_bases(iface):
+    """The interfaces ``iface`` inherits directly, as full definitions."""
+    out = []
+    for b in iface.inheritances:
+        b = b if is_interface(b) else getattr(b, "obj", b)
+        if is_interface(b) and is_forward(b):
+            b = full_definition(b) or b
+        if is_interface(b):
+            out.append(b)
+    return out
+
+
+def ami_operations(iface):
+    """``[(member, declaring interface)]``: the two-way operations and the
+    attributes of ``iface`` that get ``sendc_`` operations and handler
+    operations, those it declares and those of its abstract bases (which
+    have no handler of their own), in order."""
+    out = []
+    seen = set()
+
+    # Abstract interfaces a concrete base already brings (with its handler).
+    def reach(i):
+        for b in _interface_bases(i):
+            if id(b) not in seen:
+                seen.add(id(b))
+                reach(b)
+
+    for b in _interface_bases(iface):
+        if not b.is_abstract:
+            seen.add(id(b))
+            reach(b)
+
+    def add(i):
+        for b in _interface_bases(i):
+            if b.is_abstract and id(b) not in seen:
+                seen.add(id(b))
+                add(b)
+        for m in _all_operations(i):
+            if is_operation(m) and m.oneway:
+                continue
+            out.append((m, i))
+
+    seen.add(id(iface))
+    for b in _interface_bases(iface):
+        if b.is_abstract and id(b) not in seen:
+            seen.add(id(b))
+            add(b)
+    for m in _all_operations(iface):
+        if is_operation(m) and m.oneway:
+            continue
+        out.append((m, iface))
+    return out
+
+
+def _member_names(iface, names=None):
+    """The names of the operations and attributes of ``iface`` and its
+    bases."""
+    if names is None:
+        names = set()
+    for m in _all_operations(iface):
+        names.add(m.name)
+    for b in _interface_bases(iface):
+        _member_names(b, names)
+    return names
+
+
+def sendc_name(iface, name):
+    """The name of the ``sendc_`` operation of the operation (or ``get_`` /
+    ``set_`` attribute accessor) ``name`` of ``iface``: ``sendc_<name>``,
+    with ``ami_`` after ``sendc_`` while it clashes with a name of the
+    interface or its bases."""
+    taken = _member_names(iface)
+    prefix = "sendc_"
+    while prefix + name in taken:
+        prefix += "ami_"
+    return prefix + name
+
+
 def _handler_body(iface):
     """The IDL of the operations of the AMI handler of ``iface``."""
     lines = []
@@ -745,10 +830,8 @@ def _handler_body(iface):
         lines.append("    void %s(%s);" % (name, ", ".join(params)))
         lines.append("    void %s_excep%s;" % (name, excep))
 
-    for m in _all_operations(iface):
+    for m, _ in ami_operations(iface):
         if is_operation(m):
-            if m.oneway:
-                continue
             params = []
             if not isinstance(m.returns, idl_type.IDLVoid):
                 params.append("in %s ami_return_val" % idl_type_text(m.returns))

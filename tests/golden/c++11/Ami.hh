@@ -210,6 +210,8 @@ namespace AmiTest {
     static constexpr const char* _rorb_repository_id = "IDL:example.org/AmiTest/AMI_ConcreteHandler:1.0";
     AMI_ConcreteHandler(::rustorb::detail::adopt_t, rorb_object* _h) noexcept : ::CORBA::Object(::rustorb::detail::adopt, _h) {}
 
+    virtual void y();
+    virtual void y_excep(::IDL::traits<::Messaging::ExceptionHolder>::ref_type excep_holder);
     virtual void z();
     virtual void z_excep(::IDL::traits<::Messaging::ExceptionHolder>::ref_type excep_holder);
 
@@ -372,6 +374,8 @@ namespace POA_AmiTest {
 
 class AMI_ConcreteHandler : public virtual ::POA_Messaging::ReplyHandler {
  public:
+  virtual void y() = 0;
+  virtual void y_excep(::IDL::traits<::Messaging::ExceptionHolder>::ref_type excep_holder) = 0;
   virtual void z() = 0;
   virtual void z_excep(::IDL::traits<::Messaging::ExceptionHolder>::ref_type excep_holder) = 0;
 

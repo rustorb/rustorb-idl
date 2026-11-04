@@ -723,6 +723,20 @@ bool POA_AmiTest::AMI_AMI_ClashHandlerHandler::_rorb_ops_AmiTest_AMI_AMI_ClashHa
   return false;
 }
 
+void AmiTest::AMI_ConcreteHandler::y() {
+  ::rustorb::detail::invoke<>(this, "y", false,
+      ::rustorb::detail::no_args(),
+      ::rustorb::detail::no_results());
+}
+
+void AmiTest::AMI_ConcreteHandler::y_excep(::IDL::traits<::Messaging::ExceptionHolder>::ref_type excep_holder) {
+  ::rustorb::detail::invoke<>(this, "y_excep", false,
+      [&](rorb_out* _out) {
+        ::rustorb::cdr::codec<::IDL::traits<::Messaging::ExceptionHolder>::ref_type>::write(_out, excep_holder);
+      },
+      ::rustorb::detail::no_results());
+}
+
 void AmiTest::AMI_ConcreteHandler::z() {
   ::rustorb::detail::invoke<>(this, "z", false,
       ::rustorb::detail::no_args(),
@@ -762,6 +776,18 @@ rorb_status POA_AmiTest::AMI_ConcreteHandler::_rorb_dispatch(const char* op, siz
 
 bool POA_AmiTest::AMI_ConcreteHandler::_rorb_ops_AmiTest_AMI_ConcreteHandler(std::string_view op, rorb_in* in, rorb_server_reply* reply) {
   (void)reply;
+  if (op == "y") {
+    if (rorb_in_failed(in)) return true;
+    this->y();
+    return true;
+  }
+  if (op == "y_excep") {
+    ::IDL::traits<::Messaging::ExceptionHolder>::ref_type excep_holder{};
+    ::rustorb::cdr::codec<::IDL::traits<::Messaging::ExceptionHolder>::ref_type>::read(in, excep_holder);
+    if (rorb_in_failed(in)) return true;
+    this->y_excep(excep_holder);
+    return true;
+  }
   if (op == "z") {
     if (rorb_in_failed(in)) return true;
     this->z();

@@ -5,6 +5,10 @@
 package AmiTest;
 
 public interface AMI_ConcreteHandlerOperations extends Messaging.ReplyHandlerOperations {
+    void y();
+
+    void y_excep(Messaging.ExceptionHolder excep_holder);
+
     void z();
 
     void z_excep(Messaging.ExceptionHolder excep_holder);

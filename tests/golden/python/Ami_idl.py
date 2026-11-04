@@ -12,12 +12,11 @@ _0_rt.check_version(1)
 
 # Files included by Ami.idl
 import AmiBase_idl  # AmiBase.idl
-import Messaging_idl  # Messaging.idl
 
 _0_AmiTest = _0_rt.open_module("AmiTest", __file__)
 _0_AmiTest__POA = _0_rt.open_module("AmiTest__POA", __file__)
-_0_Messaging = _0_rt.open_module("Messaging", __file__)
-_0_Messaging__POA = _0_rt.open_module("Messaging__POA", __file__)
+from rustorb import Messaging as _0_Messaging
+from rustorb import Messaging__POA as _0_Messaging__POA
 
 # exception Busy
 _0_AmiTest._tc_Busy = _0_rt.declare_except("IDL:example.org/AmiTest/Busy:1.0", "Busy")
@@ -99,6 +98,24 @@ class _objref_Calc(_0_AmiTest._objref_Base):
     def fire(self, n):
         return self._invoke(_0_AmiTest.Calc._NP_operations["fire"], (n,))
 
+    def sendc_add(self, ami_handler, a, b):
+        self._sendc(_0_AmiTest.Calc._NP_operations["add"], ami_handler, "add", "add_excep", (a, b))
+
+    def sendc_swap(self, ami_handler, ps, tag):
+        self._sendc(_0_AmiTest.Calc._NP_operations["swap"], ami_handler, "swap", "swap_excep", (ps, tag))
+
+    def sendc_nothing(self, ami_handler):
+        self._sendc(_0_AmiTest.Calc._NP_operations["nothing"], ami_handler, "nothing", "nothing_excep", ())
+
+    def sendc_get_label(self, ami_handler):
+        self._sendc(_0_AmiTest.Calc._NP_operations["_get_label"], ami_handler, "get_label", "get_label_excep", ())
+
+    def sendc_set_label(self, ami_handler, attr_label):
+        self._sendc(_0_AmiTest.Calc._NP_operations["_set_label"], ami_handler, "set_label", "set_label_excep", (attr_label,))
+
+    def sendc_get_count(self, ami_handler):
+        self._sendc(_0_AmiTest.Calc._NP_operations["_get_count"], ami_handler, "get_count", "get_count_excep", ())
+
     label = property(_get_label, _set_label)
 
     count = property(_get_count)
@@ -147,6 +164,9 @@ class _objref_Clash(_0_CORBA.Object):
     def op(self):
         return self._invoke(_0_AmiTest.Clash._NP_operations["op"], ())
 
+    def sendc_op(self, ami_handler):
+        self._sendc(_0_AmiTest.Clash._NP_operations["op"], ami_handler, "op", "op_excep", ())
+
 _0_AmiTest._objref_Clash = _objref_Clash
 _0_rt.register_interface(_0_AmiTest.Clash, _objref_Clash)
 del _objref_Clash
@@ -190,6 +210,9 @@ class _objref_AMI_ClashHandler(_0_CORBA.Object):
 
     def other(self):
         return self._invoke(_0_AmiTest.AMI_ClashHandler._NP_operations["other"], ())
+
+    def sendc_other(self, ami_handler):
+        self._sendc(_0_AmiTest.AMI_ClashHandler._NP_operations["other"], ami_handler, "other", "other_excep", ())
 
 _0_AmiTest._objref_AMI_ClashHandler = _objref_AMI_ClashHandler
 _0_rt.register_interface(_0_AmiTest.AMI_ClashHandler, _objref_AMI_ClashHandler)
@@ -322,6 +345,12 @@ class _objref_Concrete(_0_AmiTest._objref_Abstract):
 
     def z(self):
         return self._invoke(_0_AmiTest.Concrete._NP_operations["z"], ())
+
+    def sendc_y(self, ami_handler):
+        self._sendc(_0_AmiTest.Abstract._NP_operations["y"], ami_handler, "y", "y_excep", ())
+
+    def sendc_z(self, ami_handler):
+        self._sendc(_0_AmiTest.Concrete._NP_operations["z"], ami_handler, "z", "z_excep", ())
 
 _0_AmiTest._objref_Concrete = _objref_Concrete
 _0_rt.register_interface(_0_AmiTest.Concrete, _objref_Concrete)
@@ -536,6 +565,8 @@ _0_AmiTest.AMI_ConcreteHandler = AMI_ConcreteHandler
 del AMI_ConcreteHandler
 
 _0_AmiTest.AMI_ConcreteHandler._NP_operations = {
+    "y": _0_rt.Operation("y", (), (), ()),
+    "y_excep": _0_rt.Operation("y_excep", (_0_Messaging._tc_ExceptionHolder,), (), ()),
     "z": _0_rt.Operation("z", (), (), ()),
     "z_excep": _0_rt.Operation("z_excep", (_0_Messaging._tc_ExceptionHolder,), (), ()),
 }
@@ -548,6 +579,12 @@ class _objref_AMI_ConcreteHandler(_0_Messaging._objref_ReplyHandler):
 
     def __init__(self, obj):
         _0_CORBA.Object.__init__(self, obj)
+
+    def y(self):
+        return self._invoke(_0_AmiTest.AMI_ConcreteHandler._NP_operations["y"], ())
+
+    def y_excep(self, excep_holder):
+        return self._invoke(_0_AmiTest.AMI_ConcreteHandler._NP_operations["y_excep"], (excep_holder,))
 
     def z(self):
         return self._invoke(_0_AmiTest.AMI_ConcreteHandler._NP_operations["z"], ())

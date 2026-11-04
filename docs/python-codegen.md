@@ -56,6 +56,7 @@ rustorb-idl -bpython [-I DIR] [-D NAME[=VALUE]] [-C OUTDIR] FILE.idl...
 - **操作**：インターフェースの `_NP_operations` に、操作名（属性は `_get_x` / `_set_x`）から `_rt.Operation` への辞書を置く。`Operation` は `in_types`（in と inout の引数の TypeCode）、`out_types`（戻り値と inout・out の TypeCode）、`exceptions`（ユーザー例外の TypeCode）、`oneway`、`contexts` を持つ。基底インターフェースの操作は MRO をたどって引く（`_rt.operation`）
 - **スタブ**：各メソッドは `self._invoke(Operation, args)` を呼ぶ。結果は none / 単一の値 / タプル（IDL to Python の規則）。属性は `_get_x` / `_set_x` に加えて property `x` も持つ（omniORBpy と同じ）。`_invoke` はネイティブモジュールのオブジェクト参照に渡し、ネイティブ側は `Operation` の TypeCode でマーシャリングする（コンパイル結果を `Operation._native` に置く）。IOR からスタブを作るのは `_rt.make_objref`
 - **登録**：スタブとスケルトンは `_rt.register_interface` / `_rt.register_skeleton` でリポジトリIDから引けるようにする。`_narrow` はこれでスタブのクラスを選ぶ
+- **コールバック型 AMI（`-Wbami`）**：暗黙の IDL の `AMI_<I>Handler` は普通のインターフェースとして生成する（基底のないものは `Messaging.ReplyHandler` の派生）。`Messaging` モジュールは生成せず、ランタイムの `rustorb.Messaging` / `rustorb.Messaging__POA` を使う（同梱の `Messaging.idl` の `import Messaging_idl` も書かない）。スタブには `sendc_<op>(ami_handler, in と inout の引数)`、属性には `sendc_get_x(ami_handler)` / `sendc_set_x(ami_handler, attr_x)` を足し、各メソッドは `self._sendc(Operation, ami_handler, "<op>", "<op>_excep", args)` を呼ぶ（`Operation` は操作を宣言したインターフェースのもの。抽象インターフェースの基底の操作も具象の側に `sendc_` を持つ）。`sendc_` の名前がインターフェースと基底の操作の名前とぶつかれば `sendc_` の後に `ami_` を足す。oneway の操作には足さない。ランタイムの `CORBA.Object._sendc` が返事を Handler の `<op>`、例外を `<op>_excep` に `Messaging.ExceptionHolder` で届ける（rustorb の docs/ami.md）
 
 ## omniORBpy の実測と合わせた挙動
 

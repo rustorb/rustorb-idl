@@ -19,6 +19,12 @@ rustorb/rustorb; see its CHANGELOG.md for them.
   of the stubs and the runtime code of `Messaging` come with each language.
   `Messaging.idl` ships in `rustorb-idl --idl-dir`. `-brust -Wbami` is an
   error (Rust has the `op_async` methods).
+- Python `-Wbami` (rustorb/rustorb#138): the stubs get
+  `sendc_<op>(ami_handler, in and inout arguments)`, `sendc_get_<attr>` and
+  `sendc_set_<attr>`, which call the runtime's `CORBA.Object._sendc`
+  (needs a rustorb with callback AMI in Python). The `Messaging` module is
+  the runtime's `rustorb.Messaging`, not generated code. The handlers of
+  interfaces with abstract bases have the operations of those bases too.
 - Rust: `-Wbxtypes[=PATH]` describes the DDS types (structs, unions, enums,
   bitmasks, typedefs) for DDS-XTypes, with impls of
   `rustorb_xtypes::types::DescribeType` from which rustorb-dds builds their

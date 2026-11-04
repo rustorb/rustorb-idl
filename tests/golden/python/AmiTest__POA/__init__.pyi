@@ -8,8 +8,8 @@ from typing import Any, List, Optional, Tuple
 from rustorb import CORBA, PortableServer
 from rustorb._types import Enum as _Enum, EnumItem as _EnumItem, Struct as _Struct, Union as _Union
 import AmiTest
-import Messaging
-import Messaging__POA
+from rustorb import Messaging
+from rustorb import Messaging__POA
 
 class Calc(Base):
     _NP_RepositoryId: str
@@ -59,6 +59,8 @@ class AMI_AMI_ClashHandlerHandler(Messaging__POA.ReplyHandler):
     def other_excep(self, excep_holder: Optional[Messaging.ExceptionHolder]) -> None: ...
 class AMI_ConcreteHandler(Messaging__POA.ReplyHandler):
     _NP_RepositoryId: str
+    def y(self) -> None: ...
+    def y_excep(self, excep_holder: Optional[Messaging.ExceptionHolder]) -> None: ...
     def z(self) -> None: ...
     def z_excep(self, excep_holder: Optional[Messaging.ExceptionHolder]) -> None: ...
 # rustorb-idl: end Ami.idl

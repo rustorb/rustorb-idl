@@ -13,6 +13,26 @@ public class _AMI_ConcreteHandlerStub extends org.omg.CORBA.portable.ObjectImpl 
     }
 
     @Override
+    public void y() {
+        final class $Call extends org.rustorb.Call {
+        }
+        $Call $c = new $Call();
+        org.rustorb.Stubs.invoke(this, "y", false, $c);
+    }
+
+    @Override
+    public void y_excep(final Messaging.ExceptionHolder excep_holder) {
+        final class $Call extends org.rustorb.Call {
+            @Override
+            public void write(org.omg.CORBA.portable.OutputStream $out) {
+                Messaging.ExceptionHolderHelper.write($out, excep_holder);
+            }
+        }
+        $Call $c = new $Call();
+        org.rustorb.Stubs.invoke(this, "y_excep", false, $c);
+    }
+
+    @Override
     public void z() {
         final class $Call extends org.rustorb.Call {
         }

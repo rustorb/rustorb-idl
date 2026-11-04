@@ -228,6 +228,15 @@ class StubWriter(object):
                     out.append(("_set_" + d.name, ["value: %s" % h], "None"))
         return out
 
+    def inherited_params(self, node, key):
+        """The typed parameters of the operation ``key`` of an abstract base
+        of ``node``."""
+        for _, owner in fe.ami_operations(node):
+            for name, params, _ in self.signatures(owner):
+                if name == (py_name(key) if not key.startswith("_") else key):
+                    return params
+        return []
+
     def interface(self, node):
         w = self
         bases = [self.name_of(b) for b in self.b.bases(node)]
@@ -242,6 +251,26 @@ class StubWriter(object):
         self.nested(node)
         for name, params, r in self.signatures(node):
             w("def %s(%s) -> %s: ..." % (name, ", ".join(["self"] + params), r))
+        handler = fe.handler_of(node)
+        if handler is not None:
+            hints = {}
+            for name, params, r in self.signatures(node):
+                hints[name] = params
+            for (name, params, key, _), _ in self.b.sendc_list(node):
+                typed = hints.get(py_name(key) if not key.startswith("_") else key)
+                if typed is None:
+                    typed = self.inherited_params(node, key)
+                if key.startswith("_set_"):
+                    typed = ["%s: %s" % (params[0], typed[0].split(": ", 1)[1])]
+                w(
+                    "def %s(%s) -> None: ..."
+                    % (
+                        py_name(name),
+                        ", ".join(
+                            ["self", "ami_handler: Optional[%s]" % self.name_of(handler)] + typed
+                        ),
+                    )
+                )
         for d in fe.members_of(node):
             if fe.is_attribute(d):
                 w("%s: %s" % (py_name(d.name), self.hint(fe.type_of(d.type, d))))
@@ -291,8 +320,16 @@ class StubWriter(object):
             "from rustorb._types import Enum as _Enum, EnumItem as _EnumItem, "
             "Struct as _Struct, Union as _Union",
         ]
+        runtime = {}
+        if self.b.runtime_messaging:
+            runtime = {
+                self.b.py_module(("Messaging",)): "Messaging",
+                self.b.poa_module(("Messaging",)): "Messaging__POA",
+            }
         for m in sorted(self.imports):
-            if m != self.pkg:
+            if m in runtime:
+                head.append("from rustorb import %s" % runtime[m])
+            elif m != self.pkg:
                 head.append("import %s" % m)
         return head + [""] + self.lines
 
