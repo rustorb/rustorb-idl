@@ -76,10 +76,12 @@ class Spec(object):
         return files
 
 
-def load(path, include_dirs=(), defines=None, encoding=None, giop=True):
+def load(path, include_dirs=(), defines=None, encoding=None, giop=True, ami=False):
     """Parses the IDL file ``path``. With ``giop`` (code for CORBA), the
     annotations GIOP has no form for are refused (:func:`check_annotations`);
-    without it (code for DDS only) they are left to the backend."""
+    without it (code for DDS only) they are left to the backend. With
+    ``ami``, the implied IDL of callback AMI is added (:func:`add_ami`);
+    ``Messaging.idl`` must then be on ``include_dirs``."""
     path = os.path.abspath(path)
     p = idl_parser_mod.IDLParser(
         idl_dirs=[os.path.abspath(d) for d in include_dirs],
@@ -102,6 +104,8 @@ def load(path, include_dirs=(), defines=None, encoding=None, giop=True):
         raise GeneratorError(str(e)) from e
     if giop:
         check_annotations(root)
+    if ami:
+        add_ami(p, root, path)
     return Spec(root, path)
 
 
@@ -652,3 +656,190 @@ def bit_bound(node, default, lo, hi):
     if v is None or not lo <= v <= hi:
         raise GeneratorError("@bit_bound(%s) of %s is not in %d..%d" % (a.value, node.name, lo, hi), node)
     return v
+
+
+# ---------------------------------------------------------------------------
+# AMI: the implied IDL of the callback model (docs/ami.md of rustorb)
+
+_AMI_PREFIX = "AMI_"
+
+
+def ami_interfaces(root):
+    """The interfaces that get an AMI handler: every interface of ``root``
+    (all files) but local, abstract and forward ones, in the order they
+    are written in each file."""
+    found = []
+
+    def walk(scope):
+        for d in scope.definitions:
+            if is_module(d):
+                walk(d)
+            elif is_interface(d) and not is_forward(d) and not d.is_local and not d.is_abstract:
+                found.append(d)
+
+    walk(root)
+    found.sort(key=lambda n: (n.line_number or 0))
+    return found
+
+
+def handler_name(iface):
+    """The name of the AMI handler of ``iface``: ``AMI_<I>Handler``, with
+    more ``AMI_`` while it clashes with a name of the enclosing scope."""
+    taken = {d.name for d in iface.parent.definitions}
+    name = _AMI_PREFIX + iface.name + "Handler"
+    while name in taken:
+        name = _AMI_PREFIX + name
+    return name
+
+
+def handler_of(iface):
+    """The AMI handler interface added for ``iface`` by :func:`add_ami`,
+    or None."""
+    return getattr(iface, "_rustorb_ami_handler", None)
+
+
+def ami_source(iface):
+    """The interface ``iface`` an AMI handler was made for, or None for any
+    other definition."""
+    return getattr(iface, "_rustorb_ami_source", None)
+
+
+def idl_type_text(t):
+    """The IDL text of the idl_parser type node ``t``, with names fully
+    scoped, so that it means the same type anywhere."""
+    if isinstance(t, idl_type.IDLBasicType):
+        obj = t.obj
+        if obj is None:
+            raise GeneratorError("Can not find the type %s" % t.ref_name)
+        return idl_type_text(obj)
+    if isinstance(t, idl_type.IDLVoid):
+        return "void"
+    if isinstance(t, idl_type.IDLSequence):
+        inner = idl_type_text(t.inner_type)
+        return "sequence<%s, %d>" % (inner, t.bound) if t.bound else "sequence<%s>" % inner
+    if isinstance(t, idl_type.IDLFixed):
+        return "fixed<%d, %d>" % (t.digits, t.scale)
+    if isinstance(t, idl_type.IDLPrimitive):
+        return " ".join(t.name.split())
+    if getattr(t, "parent", None) is not None and getattr(t, "name", None):
+        if (is_interface(t) or is_valuetype(t)) and is_forward(t):
+            t = full_definition(t) or t
+        return "::" + "::".join(scope_path(t))
+    raise GeneratorError("the type %s cannot be used with -Wbami" % getattr(t, "name", t))
+
+
+def _all_operations(iface):
+    """The operations and attributes ``iface`` declares itself (not those
+    of its bases), in the order they are written."""
+    members = list(iface.methods) + list(iface.attributes)
+    members.sort(key=lambda n: n.line_number or 0)
+    return members
+
+
+def _handler_body(iface):
+    """The IDL of the operations of the AMI handler of ``iface``."""
+    lines = []
+    excep = "(in ::Messaging::ExceptionHolder excep_holder)"
+
+    def op(name, params):
+        lines.append("    void %s(%s);" % (name, ", ".join(params)))
+        lines.append("    void %s_excep%s;" % (name, excep))
+
+    for m in _all_operations(iface):
+        if is_operation(m):
+            if m.oneway:
+                continue
+            params = []
+            if not isinstance(m.returns, idl_type.IDLVoid):
+                params.append("in %s ami_return_val" % idl_type_text(m.returns))
+            for a in m.arguments:
+                if a.direction in ("out", "inout"):
+                    params.append("in %s %s" % (idl_type_text(a.type), a.name))
+            op(m.name, params)
+        else:
+            op("get_" + m.name, ["in %s ami_return_val" % idl_type_text(m.type)])
+            if not m.readonly:
+                op("set_" + m.name, [])
+    return lines
+
+
+def add_ami(parser, root, path):
+    """Adds the implied IDL of callback AMI to ``root``: an interface
+    ``AMI_<I>Handler`` for every interface of :func:`ami_interfaces`, in
+    the same module and the same file as it, after the file's own
+    definitions. ``Messaging.idl`` (``Messaging::ReplyHandler`` and
+    ``Messaging::ExceptionHolder``) is included by the main file if no file
+    has it. The ``sendc_`` operations are not added to the AST: the
+    backends write them in the stubs, from :func:`handler_of`.
+
+    Each handler remembers its interface (:func:`ami_source`) and each
+    interface its handler (:func:`handler_of`)."""
+    ifaces = ami_interfaces(root)
+    messaging = None
+    for d in root.definitions:
+        if is_module(d) and d.name == "Messaging":
+            messaging = d
+    has_reply_handler = messaging is not None and any(
+        is_interface(d) and d.name == "ReplyHandler" for d in messaging.definitions
+    )
+    if not has_reply_handler:
+        try:
+            parser.load("#include <Messaging.idl>\n", filepath=path)
+        except idl_exception.IDLParserException as e:
+            raise GeneratorError(str(e)) from e
+    # Interfaces by file: the included files first, in the order they are
+    # first seen, so that a base's handler is made before its derived ones.
+    order = Spec(root, path).included_files() + [path]
+    by_file = {}
+    for f in order:
+        group = [i for i in ifaces if i.filepath == f]
+        if group:
+            by_file[f] = group
+    names = {}
+    for i in ifaces:
+        names[id(i)] = handler_name(i)
+    for filepath, group in by_file.items():
+        try:
+            with open(filepath, "rb") as f:
+                count = f.read().count(b"\n") + 1
+        except OSError:
+            count = max((i.line_number or 0) for i in group) + 1
+        # After the file's own lines, so that the handlers come after the
+        # definitions they use when the backends sort by line.
+        text = ["" for _ in range(count)]
+        for i in group:
+            modules = enclosing_modules(i)
+            bases = []
+            for b in i.inheritances:
+                b = b if is_interface(b) else getattr(b, "obj", b)
+                if is_interface(b) and is_forward(b):
+                    b = full_definition(b) or b
+                if b.is_abstract or b.is_local:
+                    continue
+                bases.append("::" + "::".join(enclosing_modules(b) + (names[id(b)],)))
+            if not bases:
+                bases = ["::Messaging::ReplyHandler"]
+            open_ = " ".join("module %s {" % m for m in modules)
+            close = " ".join("};" for _ in modules)
+            text.append(open_)
+            text.append("  interface %s : %s {" % (names[id(i)], ", ".join(bases)))
+            text.extend(_handler_body(i))
+            text.append("  };")
+            text.append(close)
+        try:
+            parser.load("\n".join(text) + "\n", filepath=filepath)
+        except idl_exception.IDLParserException as e:
+            raise GeneratorError("-Wbami: %s" % e) from e
+        for i in group:
+            handler = None
+            for d in i.parent.definitions:
+                if is_interface(d) and d.name == names[id(i)]:
+                    handler = d
+            if handler is None:
+                raise GeneratorError("-Wbami: the handler of %s was not made" % i.name, i)
+            handler._rustorb_ami_source = i
+            i._rustorb_ami_handler = handler
+            rid = i.repository_id or ""
+            head, sep, version = rid.rpartition(":")
+            if rid.startswith("IDL:") and sep and (head.endswith("/" + i.name) or head == "IDL:" + i.name):
+                handler._repo_id = "%s%s:%s" % (head[: len(head) - len(i.name)], names[id(i)], version)

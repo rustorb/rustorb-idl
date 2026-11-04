@@ -14,6 +14,9 @@ The options follow omniidl where they mean the same thing:
   -Wbpackage=PKG    put the Python modules in the package PKG (python), or
                     every Java package under PKG (java)
   -Wbno_stubs       do not write the .pyi type stubs (python)
+  -Wbami            also write the implied IDL of callback AMI: an
+                    AMI_<I>Handler interface for each interface (python,
+                    c++11, java; rustorb's docs/ami.md)
   -Wbh=SUFFIX       the header suffix (c++11, default .hh)
   -Wbs=SUFFIX       the source suffix (c++11, default .cc)
   -Wbextern=MODULE=PATH
@@ -37,7 +40,7 @@ The options follow omniidl where they mean the same thing:
                     or @mutable: final, appendable (the default) or mutable
                     (rust, DDS)
 
-The standard IDL files that come with rustorb-idl (CosNaming.idl) are in the
+The standard IDL files that come with rustorb-idl (CosNaming.idl, Messaging.idl) are in the
 directory `rustorb-idl --idl-dir` prints, which is also searched for
 #include files after the -I directories.
 """
@@ -77,7 +80,7 @@ def parse_args(argv):
     ap.add_argument(
         "--idl-dir",
         action="store_true",
-        help="print the directory of the standard IDL files (CosNaming.idl) and exit",
+        help="print the directory of the standard IDL files (CosNaming.idl, Messaging.idl) and exit",
     )
     ap.add_argument("files", nargs="+", metavar="FILE.idl")
     return ap.parse_args(argv)
@@ -102,8 +105,14 @@ def main(argv=None):
             "rustorb-idl: unknown backend %r (python, c++11, java and rust are available)\n" % args.backend
         )
         return 2
+    ami = False
     for opt in args.backend_options:
-        if backend is python_backend and opt.startswith("bglobal="):
+        if opt == "bami":
+            if backend is rust_backend:
+                sys.stderr.write("rustorb-idl: -Wbami is not for rust: use the op_async methods of the stubs\n")
+                return 2
+            ami = True
+        elif backend is python_backend and opt.startswith("bglobal="):
             options.global_module = opt[len("bglobal=") :]
         elif backend is python_backend and opt.startswith("bpackage="):
             options.package = opt[len("bpackage=") :].strip(".")
@@ -157,7 +166,7 @@ def main(argv=None):
     for path in args.files:
         try:
             giop = not (backend is rust_backend and options.dds_only)
-            spec = frontend.load(path, args.include + [IDL_DIR], defines, args.encoding, giop=giop)
+            spec = frontend.load(path, args.include + [IDL_DIR], defines, args.encoding, giop=giop, ami=ami)
             if backend is python_backend:
                 generator = python_backend.PythonBackend(spec, options)
             elif backend is java_backend:
