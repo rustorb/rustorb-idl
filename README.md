@@ -6,7 +6,9 @@ The IDL compiler of [rustorb](https://github.com/rustorb/rustorb) (CORBA) and
 [rustorb-dds](https://github.com/rustorb/rustorb-dds) (DDS). It reads IDL with
 [idl_parser](https://github.com/sugarsweetrobotics/idl_parser) and writes
 code for Rust (`-brust`, with the DDS type support of `-Wbdds` /
-`-Wbdds_only`), Python (`-bpython`), C++11 (`-bc++11`) and Java (`-bjava`).
+`-Wbdds_only`), Python (`-bpython`, with the DDS types for rustorb-dds's
+`rustorb_dds` package of `-Wbdds` / `-Wbdds_only`), C++11 (`-bc++11`) and
+Java (`-bjava`).
 
 | Directory | Package | Published as |
 | --- | --- | --- |

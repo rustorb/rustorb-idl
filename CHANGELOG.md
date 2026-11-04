@@ -8,6 +8,11 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ### Added
 
+- Python: `-Wbdds` / `-Wbdds_only` write `Foo_dds.py`, the DDS types of the
+  file (structs, unions, enums, bitmasks, typedefs, constants) declared for
+  rustorb-dds's Python package `rustorb_dds`, whose TypeObjects match those
+  of other implementations for the same IDL (rustorb/rustorb-dds#35).
+  `-Wbextensibility` applies to them too.
 - Rust: `-Wbxtypes[=PATH]` describes the DDS types (structs, unions, enums,
   bitmasks, typedefs) for DDS-XTypes, with impls of
   `rustorb_xtypes::types::DescribeType` from which rustorb-dds builds their

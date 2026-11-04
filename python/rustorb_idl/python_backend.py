@@ -96,6 +96,11 @@ class Options(object):
         self.stubs = stubs
         # Python package to put everything in (omniidl's -Wbpackage)
         self.package = package
+        # -Wbdds / -Wbdds_only: also / only Foo_dds.py (python_dds.py)
+        self.dds = False
+        self.dds_only = False
+        # -Wbextensibility, for the DDS types
+        self.extensibility = "appendable"
 
 
 class PythonBackend(object):

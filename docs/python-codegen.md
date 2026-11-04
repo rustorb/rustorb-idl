@@ -57,6 +57,17 @@ rustorb-idl -bpython [-I DIR] [-D NAME[=VALUE]] [-C OUTDIR] FILE.idl...
 - **スタブ**：各メソッドは `self._invoke(Operation, args)` を呼ぶ。結果は none / 単一の値 / タプル（IDL to Python の規則）。属性は `_get_x` / `_set_x` に加えて property `x` も持つ（omniORBpy と同じ）。`_invoke` はネイティブモジュールのオブジェクト参照に渡し、ネイティブ側は `Operation` の TypeCode でマーシャリングする（コンパイル結果を `Operation._native` に置く）。IOR からスタブを作るのは `_rt.make_objref`
 - **登録**：スタブとスケルトンは `_rt.register_interface` / `_rt.register_skeleton` でリポジトリIDから引けるようにする。`_narrow` はこれでスタブのクラスを選ぶ
 
+## DDS の型（-Wbdds / -Wbdds\_only）
+
+`-Wbdds` は CORBA のコードに加えて、`-Wbdds_only` はそれだけを、`Foo_dds.py` に書く（rustorb/rustorb-dds#35）。rustorb-dds の Python バインディング `rustorb_dds` のデコレーター（`@rustorb_dds.struct` など）で struct・union・enum・bitmask・typedef を宣言し、定数も置く。CORBA の `Foo_idl.py` とは別のファイルで、`rustorb` パッケージには依存しない。
+
+- **決定（2026-11-04）**：CORBA のクラスとは別のクラスにする。CORBA の struct は位置引数の `__init__` と TypeCode、union は `_d` / `_v` を持ち、DDS 側（dataclass、`discriminator` / `value`、`IntEnum`）と形が違うため、同じクラスを両方に使うと片方の慣習を崩す
+- IDL モジュールは `Foo_dds` の中のモジュールオブジェクト（`types.ModuleType`）で、入れ子のモジュールは外側の属性。`from Foo_dds import HelloWorld` で `HelloWorld.Greeting` を使う。include したファイルの型はそのファイルの `*_dds.py` を import して指す（`-Wbpackage` の下の名前で）
+- 型の名前は IDL の完全名（`HelloWorld::Greeting`）、メンバーIDは `@id` / `@hashid` / `@autoid` から rust\_dds.py と同じ規則で決める。拡張性の既定は `-Wbextensibility`（既定 appendable）
+- Python のキーワードと同じ名前（`from` など）は `_from` にし、DDS 上の名前は `name="from"` で元のまま渡す
+- 生成した型の TypeObject は Cyclone DDS の idlc と同じハッシュになる（rustorb-dds の `python/tests/test_generated.py` が fixtures の全10型で確かめる）
+- 対応しないもの（エラーにする）：struct の継承、mutable な union、前方宣言と再帰型、map、`@non_serialized` / `@default` / `@try_construct`、DDS に形のない型（any、interface など）
+
 ## omniORBpy の実測と合わせた挙動
 
 `interop/scripts/pymapping-dump` で omniidl -bpython の生成物を omniORBpy 上で調べ、次の挙動を合わせた（`interop/expected/pymapping-omniorbpy.txt`）。
