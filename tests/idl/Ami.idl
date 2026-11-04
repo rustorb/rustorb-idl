@@ -1,0 +1,43 @@
+// The implied IDL of callback AMI (rustorb-idl -Wbami, rustorb's
+// docs/ami.md): test_ami.py and the golden cases.
+
+#include "AmiBase.idl"
+
+#pragma prefix "example.org"
+
+module AmiTest {
+  exception Busy {
+    long retry_after;
+  };
+
+  interface Calc : Base {
+    typedef sequence<Pair> Pairs;
+
+    long add(in long a, in long b, out long carry) raises (Busy);
+    Pairs swap(inout Pairs ps, in string tag);
+    void nothing();
+    attribute string label;
+    readonly attribute long count;
+    oneway void fire(in long n);
+  };
+
+  // Names an AMI handler would clash with.
+  interface Clash {
+    void op();
+  };
+  interface AMI_ClashHandler {
+    void other();
+  };
+
+  // No handlers for these.
+  local interface Local {
+    void x();
+  };
+  abstract interface Abstract {
+    void y();
+  };
+
+  interface Concrete : Abstract {
+    void z();
+  };
+};

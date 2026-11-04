@@ -13,6 +13,17 @@ rustorb/rustorb; see its CHANGELOG.md for them.
   rustorb-dds's Python package `rustorb_dds`, whose TypeObjects match those
   of other implementations for the same IDL (rustorb/rustorb-dds#35).
   `-Wbextensibility` applies to them too.
+- `-Wbami` (python, c++11, java): the implied IDL of callback AMI
+  (rustorb/rustorb#137, rustorb's docs/ami.md). Each interface but local and
+  abstract ones gets an `AMI_<I>Handler` interface, inheriting the handlers of
+  its bases or `Messaging::ReplyHandler`, in the same module and file, with
+  `<op>(ami_return_val, out and inout arguments)` and
+  `<op>_excep(Messaging::ExceptionHolder)` for each two-way operation and
+  `get_` / `set_` ones for attributes; clashing names get more `AMI_`. The
+  backends write the handlers as ordinary interfaces; the `sendc_` operations
+  of the stubs and the runtime code of `Messaging` come with each language.
+  `Messaging.idl` ships in `rustorb-idl --idl-dir`. `-brust -Wbami` is an
+  error (Rust has the `op_async` methods).
 - Rust: `-Wbxtypes[=PATH]` describes the DDS types (structs, unions, enums,
   bitmasks, typedefs) for DDS-XTypes, with impls of
   `rustorb_xtypes::types::DescribeType` from which rustorb-dds builds their

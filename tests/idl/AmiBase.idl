@@ -1,0 +1,20 @@
+// A base interface in a file of its own, for the AMI tests (test_ami.py):
+// its handler is made in this file, and Ami.idl's handlers inherit it.
+
+#ifndef _AMI_BASE_IDL_
+#define _AMI_BASE_IDL_
+
+#pragma prefix "example.org"
+
+module AmiTest {
+  struct Pair {
+    long a;
+    string b;
+  };
+
+  interface Base {
+    void ping(in long x, out Pair p);
+  };
+};
+
+#endif
