@@ -6,7 +6,9 @@ ORB with its core written in Rust. It reads IDL with
 stubs and skeletons for:
 
 - `-bpython`: the standard IDL to Python mapping, in the layout of
-  omniidl -bpython (for the `rustorb` package)
+  omniidl -bpython (for the `rustorb` package); with `-Wbdds` or
+  `-Wbdds_only`, `Foo_dds.py`, the DDS types for rustorb-dds's Python
+  package `rustorb_dds`
 - `-brust`: Rust (for `rustorb-core`; or `rustorb-codegen` in `build.rs`)
 - `-bc++11`: the IDL to C++11 mapping (for the rustorb C++ binding)
 - `-bjava`: the IDL to Java mapping (for the rustorb Java binding)
