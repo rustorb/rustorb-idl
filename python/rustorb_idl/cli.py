@@ -32,6 +32,9 @@ The options follow omniidl where they mean the same thing:
   -Wbtypesupport=PATH
                     the path of rustorb-typesupport (rust, default
                     ::rustorb_typesupport)
+  -Wbxtypes[=PATH]  with -Wbdds or -Wbdds_only, also describe the types for
+                    DDS-XTypes (TypeObject), with rustorb-xtypes at PATH
+                    (rust, default ::rustorb_xtypes)
   -Wbextensibility=KIND
                     the extensibility of types without @final, @appendable
                     or @mutable: final, appendable (the default) or mutable
@@ -137,6 +140,10 @@ def main(argv=None):
             options.dds = True
         elif backend is rust_backend and opt == "bdds_only":
             options.dds_only = True
+        elif backend is rust_backend and opt == "bxtypes":
+            options.xtypes = "::rustorb_xtypes"
+        elif backend is rust_backend and opt.startswith("bxtypes="):
+            options.xtypes = opt[len("bxtypes=") :]
         elif backend is rust_backend and opt.startswith("btypesupport="):
             options.typesupport = opt[len("btypesupport=") :]
         elif backend is rust_backend and opt.startswith("bextensibility="):
@@ -148,6 +155,9 @@ def main(argv=None):
         else:
             sys.stderr.write("rustorb-idl: unknown option -W%s\n" % opt)
             return 2
+    if backend is rust_backend and options.xtypes and not (options.dds or options.dds_only):
+        sys.stderr.write("rustorb-idl: -Wbxtypes needs -Wbdds or -Wbdds_only\n")
+        return 2
     defines = {}
     for d in args.define:
         name, _, value = d.partition("=")

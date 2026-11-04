@@ -19,6 +19,11 @@ rustorb/rustorb; see its CHANGELOG.md for them.
   of the stubs and the runtime code of `Messaging` come with each language.
   `Messaging.idl` ships in `rustorb-idl --idl-dir`. `-brust -Wbami` is an
   error (Rust has the `op_async` methods).
+- Rust: `-Wbxtypes[=PATH]` describes the DDS types (structs, unions, enums,
+  bitmasks, typedefs) for DDS-XTypes, with impls of
+  `rustorb_xtypes::types::DescribeType` from which rustorb-dds builds their
+  TypeObjects (rustorb/rustorb-dds#31). Types that depend on themselves are
+  refused for now.
 
 ### Changed
 
@@ -26,6 +31,15 @@ rustorb/rustorb; see its CHANGELOG.md for them.
   repository, with its history (rustorb/rustorb#118). Its tests check the
   output against `tests/golden/`; the tests that compile and run the
   generated code need a rustorb checkout (`RUSTORB_SRC`)
+
+### Fixed
+
+- Rust: members of type `string`, `sequence`, `@optional` and `@external`,
+  and object references, name the standard types by their full path
+  (`::std::string::String`, `::std::vec::Vec`, `::std::option::Option`,
+  `::std::boxed::Box`). An IDL type that maps to one of those names, such
+  as ROS 2's `std_msgs::msg::dds_::String_` (Rust `String`), shadowed the
+  standard type in its module, and the generated code did not compile.
 
 ## [0.2.0] - 2026-11-02
 

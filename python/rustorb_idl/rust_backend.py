@@ -206,6 +206,9 @@ class Options(object):
         self.typesupport = "::rustorb_typesupport"
         # The extensibility of types without an annotation for it.
         self.extensibility = "appendable"
+        # The path of rustorb-xtypes, to describe the DDS types for
+        # DDS-XTypes (-Wbxtypes), or None.
+        self.xtypes = None
 
 
 class Writer(cxx_backend.Writer):
@@ -400,27 +403,30 @@ class RustBackend(DdsMixin):
             return (self.R if self.corba else self.TS) + "::LongDouble"
         if k == "void":
             return "()"
+        # The standard types by their full path: an IDL type may be named
+        # `String_` (ROS 2's std_msgs::msg::dds_::String_), which maps to
+        # a Rust `String` that would shadow the prelude's.
         if k in ("string", "wstring"):
-            return "String"
+            return "::std::string::String"
         if k == "any":
             return self.R + "::Any"
         if k == "TypeCode":
             return self.R + "::TypeCode"
         if k == "Object":
-            return "Option<%s::ObjectRef>" % self.R
+            return "::std::option::Option<%s::ObjectRef>" % self.R
         if k == "fixed":
             return self.R + "::Fixed"
         if k == "sequence":
-            return "Vec<%s>" % self.rtype(t.content, cur, where)
+            return "::std::vec::Vec<%s>" % self.rtype(t.content, cur, where)
         if k == "array":
             return "[%s; %d]" % (self.rtype(t.content, cur, where), t.length)
         if k == "named":
             n = self.full(t.node)
             self.check_named(n, where)
             if is_local(n):
-                return "Option<::std::sync::Arc<dyn %s>>" % self.ref(n, cur)
+                return "::std::option::Option<::std::sync::Arc<dyn %s>>" % self.ref(n, cur)
             if fe.is_interface(n) or fe.is_valuetype(n):
-                return "Option<%s>" % self.ref(n, cur)
+                return "::std::option::Option<%s>" % self.ref(n, cur)
             return self.ref(n, cur)
         raise fe.GeneratorError("no Rust type for %r" % t, where)
 
@@ -1123,6 +1129,8 @@ class RustBackend(DdsMixin):
         self.doc(w, node, "IDL typedef")
         w("pub type %s = %s;" % (name, self.rtype(t, cur, node)))
         w()
+        if self.dds and self.opt.xtypes:
+            self.xtypes_typedef(w, node, cur, name, t)
 
     # -- structs and exceptions ------------------------------------------
 

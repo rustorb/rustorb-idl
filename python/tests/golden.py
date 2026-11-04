@@ -16,6 +16,7 @@ CASES = [
     ("rust", ["-brust"], "RustMapping.idl"),
     ("rust", ["-brust", "-Wbdds_only"], "DdsMapping.idl"),
     ("rust", ["-brust", "-Wbdds"], "DdsCorba.idl"),
+    ("rust", ["-brust", "-Wbdds_only", "-Wbxtypes"], "DdsXTypes.idl"),
     ("rust", ["-brust"], "CosNaming.idl"),
     ("python", ["-bpython"], "Mapping.idl"),
     ("python", ["-bpython"], "CosNaming.idl"),
