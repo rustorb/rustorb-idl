@@ -20,6 +20,8 @@ CASES = [
     ("rust", ["-brust"], "CosNaming.idl"),
     ("python", ["-bpython"], "Mapping.idl"),
     ("python", ["-bpython"], "CosNaming.idl"),
+    ("python", ["-bpython", "-Wbdds_only"], "DdsXTypes.idl"),
+    ("python", ["-bpython", "-Wbdds_only"], "DdsMapping.idl"),
     ("c++11", ["-bc++11"], "cpp/CxxMapping.idl"),
     ("c++11", ["-bc++11"], "CosNaming.idl"),
     ("java", ["-bjava"], "cpp/CxxMapping.idl"),

@@ -8,6 +8,11 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ### Added
 
+- Python: `-Wbdds` / `-Wbdds_only` write `Foo_dds.py`, the DDS types of the
+  file (structs, unions, enums, bitmasks, typedefs, constants) declared for
+  rustorb-dds's Python package `rustorb_dds`, whose TypeObjects match those
+  of other implementations for the same IDL (rustorb/rustorb-dds#35).
+  `-Wbextensibility` applies to them too.
 - `-Wbami` (python, c++11, java): the implied IDL of callback AMI
   (rustorb/rustorb#137, rustorb's docs/ami.md). Each interface but local and
   abstract ones gets an `AMI_<I>Handler` interface, inheriting the handlers of
