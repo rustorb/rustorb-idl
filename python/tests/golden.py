@@ -28,6 +28,8 @@ CASES = [
     ("c++11", ["-bc++11", "-Wbdds"], "DdsCorba.idl"),
     ("java", ["-bjava"], "cpp/CxxMapping.idl"),
     ("java", ["-bjava"], "CosNaming.idl"),
+    ("java", ["-bjava", "-Wbdds_only"], "DdsMapping.idl"),
+    ("java", ["-bjava", "-Wbdds"], "DdsCorba.idl"),
     ("python", ["-bpython", "-Wbami"], "Ami.idl"),
     ("c++11", ["-bc++11", "-Wbami"], "Ami.idl"),
     ("java", ["-bjava", "-Wbami"], "Ami.idl"),

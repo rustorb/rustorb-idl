@@ -8,6 +8,19 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ### Added
 
+- Java: `-Wbdds` / `-Wbdds_only` write a class `<Name>Codec` next to each
+  struct, union, enum, bitmask and typedef, the DDS type support for
+  rustorb-dds's Java binding (the DDS Java 5 PSM, `org.omg.dds`):
+  `type()` builds the type through rustorb-dds's C ABI, and the
+  `INSTANCE` of a struct, union or enum codec writes and reads its values
+  (rustorb/rustorb-dds#46). Their TypeObjects are those of other
+  implementations for the same IDL. `-Wbdds_only` writes the classes of
+  the types without CORBA, mostly as the IDL4 to Java mapping has them:
+  Java enums with `getValue()` and `valueOf(int)` (and `@value`),
+  `@optional` as boxed types and `null`, `bitmask` as `java.util.BitSet`
+  and an enum `<Name>Flags`, `int8` as `byte`, and members that are not
+  null in a new struct. `-Wbdds` writes the codecs beside the CORBA code,
+  for types used by both. `-Wbextensibility` applies to them too.
 - C++: `-Wbdds` / `-Wbdds_only` write `Foo_dds.hh`, the DDS type support of
   the structs, unions, enums, bitmasks and typedefs of the file for
   rustorb-dds's C++ binding (the ISO/IEC C++ PSM, `<dds/dds.hpp>`):
@@ -58,6 +71,10 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ### Fixed
 
+- Java: the Helper of a union with no default member whose labels use
+  every value of the discriminator (an enum) called `__default`, which
+  such a union does not have, and did not compile; it now throws
+  `MARSHAL` for a discriminator with no member.
 - Rust: members of type `string`, `sequence`, `@optional` and `@external`,
   and object references, name the standard types by their full path
   (`::std::string::String`, `::std::vec::Vec`, `::std::option::Option`,

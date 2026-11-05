@@ -184,6 +184,12 @@ class Options(object):
         # and the definitions outside modules are in it rather than in the
         # unnamed package (which a named package cannot use).
         self.package = ""
+        # -Wbdds / -Wbdds_only: also / only the DDS type support
+        # (java_dds.py), and the extensibility of the structs and unions
+        # that have none (-Wbextensibility).
+        self.dds = False
+        self.dds_only = False
+        self.extensibility = "appendable"
 
 
 class JavaBackend(object):
@@ -1172,6 +1178,20 @@ class JavaBackend(object):
 
     # unions
 
+    def class_head(self, name):
+        """The first line of the class of a union."""
+        return "public final class %s implements org.omg.CORBA.portable.IDLEntity {" % name
+
+    def bad_operation(self):
+        """The exception a union throws for a member that is not selected."""
+        return "new org.omg.CORBA.BAD_OPERATION()"
+
+    def disc_equals(self, rdisc, a, b):
+        """Java for: discriminator value a equals b."""
+        if rdisc.kind == "named" and fe.is_enum(rdisc.node):
+            return "%s.value() == %s.value()" % (a, b)
+        return "%s == %s" % (a, b)
+
     def union(self, node):
         name = java_name(node.name)
         disc, cases, default_index = cxx_backend.CxxBackend.union_cases(self, node)
@@ -1187,12 +1207,10 @@ class JavaBackend(object):
             return self.literal(label, disc)
 
         def cmp(a, b):
-            if rdisc.kind == "named" and fe.is_enum(rdisc.node):
-                return "%s.value() == %s.value()" % (a, b)
-            return "%s == %s" % (a, b)
+            return self.disc_equals(rdisc, a, b)
 
         w = Writer()
-        w("public final class %s implements org.omg.CORBA.portable.IDLEntity {" % name)
+        w(self.class_head(name))
         w.indent()
         w("private static final long serialVersionUID = 1L;")
         w()
@@ -1205,7 +1223,7 @@ class JavaBackend(object):
         w()
         w("public %s discriminator() {" % dt)
         w("    if (__uninitialized) {")
-        w("        throw new org.omg.CORBA.BAD_OPERATION();")
+        w("        throw %s;" % self.bad_operation())
         w("    }")
         w("    return __discriminator;")
         w("}")
@@ -1216,7 +1234,7 @@ class JavaBackend(object):
             w()
             w("public %s %s() {" % (jt, jm))
             w("    if (__uninitialized) {")
-            w("        throw new org.omg.CORBA.BAD_OPERATION();")
+            w("        throw %s;" % self.bad_operation())
             w("    }")
             w("    verify%s(__discriminator);" % m)
             w("    return ___%s;" % m)
@@ -1247,12 +1265,12 @@ class JavaBackend(object):
                 conds = [cmp("discriminator", l) for l in all_labels]
                 if conds:
                     w("    if (%s) {" % " || ".join(conds))
-                    w("        throw new org.omg.CORBA.BAD_OPERATION();")
+                    w("        throw %s;" % self.bad_operation())
                     w("    }")
             else:
                 conds = [cmp("discriminator", lit(l)) for l in ls]
                 w("    if (!(%s)) {" % " || ".join(conds))
-                w("        throw new org.omg.CORBA.BAD_OPERATION();")
+                w("        throw %s;" % self.bad_operation())
                 w("    }")
             w("}")
         if not has_default and implicit is not None:
@@ -1266,7 +1284,7 @@ class JavaBackend(object):
             conds = [cmp("discriminator", l) for l in all_labels]
             if conds:
                 w("    if (%s) {" % " || ".join(conds))
-                w("        throw new org.omg.CORBA.BAD_OPERATION();")
+                w("        throw %s;" % self.bad_operation())
                 w("    }")
             w("    __discriminator = discriminator;")
             w("    __uninitialized = false;")
@@ -1375,9 +1393,13 @@ class JavaBackend(object):
                 if has_default:
                     _, m, t = cases[default_index]
                     read_member(w, m, t, True)
-                else:
+                    w("break;")
+                elif implicit is not None:
                     w("$result.__default($d);")
-                w("break;")
+                    w("break;")
+                else:
+                    # Every value has a member: not reached.
+                    w("throw new org.omg.CORBA.MARSHAL(\"no member for the discriminator\");")
                 w.level -= 2
                 w("}")
             else:
