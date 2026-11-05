@@ -26,10 +26,11 @@ The options follow omniidl where they mean the same thing:
   -Wbno_rustfmt     do not pass the output through rustfmt (rust)
   -Wbdds            also write the DDS type support of structs, unions, enums
                     and bitmasks (rust: uses rustorb-typesupport; python:
-                    Foo_dds.py, for the rustorb_dds package)
+                    Foo_dds.py, for the rustorb_dds package; c++11:
+                    Foo_dds.hh, for rustorb-dds's C++ binding)
   -Wbdds_only       write the DDS type support only, without the CORBA code
-                    (rust, python); @optional, @external, @value, int8 and
-                    bitmask can then be used
+                    (rust, python, c++11); @optional, @external, @value, int8
+                    and bitmask can then be used
   -Wbtypesupport=PATH
                     the path of rustorb-typesupport (rust, default
                     ::rustorb_typesupport)
@@ -39,7 +40,7 @@ The options follow omniidl where they mean the same thing:
   -Wbextensibility=KIND
                     the extensibility of types without @final, @appendable
                     or @mutable: final, appendable (the default) or mutable
-                    (rust, python; DDS)
+                    (rust, python, c++11; DDS)
 
 The standard IDL files that come with rustorb-idl (CosNaming.idl, Messaging.idl) are in the
 directory `rustorb-idl --idl-dir` prints, which is also searched for
@@ -52,6 +53,7 @@ import sys
 
 from . import __version__
 from . import cxx_backend
+from . import cxx_dds
 from . import frontend
 from . import java_backend
 from . import python_backend
@@ -138,9 +140,9 @@ def main(argv=None):
             options.core = opt[len("bcore=") :]
         elif backend is rust_backend and opt == "bno_rustfmt":
             options.rustfmt = False
-        elif backend in (rust_backend, python_backend) and opt == "bdds":
+        elif backend in (rust_backend, python_backend, cxx_backend) and opt == "bdds":
             options.dds = True
-        elif backend in (rust_backend, python_backend) and opt == "bdds_only":
+        elif backend in (rust_backend, python_backend, cxx_backend) and opt == "bdds_only":
             options.dds_only = True
         elif backend is rust_backend and opt == "bxtypes":
             options.xtypes = "::rustorb_xtypes"
@@ -148,7 +150,9 @@ def main(argv=None):
             options.xtypes = opt[len("bxtypes=") :]
         elif backend is rust_backend and opt.startswith("btypesupport="):
             options.typesupport = opt[len("btypesupport=") :]
-        elif backend in (rust_backend, python_backend) and opt.startswith("bextensibility="):
+        elif backend in (rust_backend, python_backend, cxx_backend) and opt.startswith(
+            "bextensibility="
+        ):
             kind = opt[len("bextensibility=") :].lower()
             if kind not in frontend.EXTENSIBILITY_KINDS:
                 sys.stderr.write("rustorb-idl: -Wbextensibility needs final, appendable or mutable\n")
@@ -167,11 +171,15 @@ def main(argv=None):
     status = 0
     for path in args.files:
         try:
-            giop = not (backend in (rust_backend, python_backend) and options.dds_only)
+            giop = not (backend in (rust_backend, python_backend, cxx_backend) and options.dds_only)
             spec = frontend.load(path, args.include + [IDL_DIR], defines, args.encoding, giop=giop, ami=ami)
             if backend is python_backend and (options.dds or options.dds_only):
                 os.makedirs(args.outdir, exist_ok=True)
                 python_dds.write_outputs(spec, args.outdir, options.package, options.extensibility)
+                if options.dds_only:
+                    continue
+            if backend is cxx_backend and (options.dds or options.dds_only):
+                cxx_dds.write_outputs(spec, args.outdir, options)
                 if options.dds_only:
                     continue
             if backend is python_backend:

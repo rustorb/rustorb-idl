@@ -57,6 +57,8 @@ jobs:
     # The tests that compile and run the generated code, with the runtimes
     # of rustorb's main branch (RUSTORB_SRC). A change of the generated code
     # that needs a runtime change fails here until rustorb has it.
+    # rustorb-dds is private, so the C++ DDS output (RUSTORB_DDS_SRC) is
+    # compiled in rustorb-dds's own CI, which checks in generated code.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

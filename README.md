@@ -7,7 +7,8 @@ The IDL compiler of [rustorb](https://github.com/rustorb/rustorb) (CORBA) and
 [idl_parser](https://github.com/sugarsweetrobotics/idl_parser) and writes
 code for Rust (`-brust`, with the DDS type support of `-Wbdds` /
 `-Wbdds_only`), Python (`-bpython`, with the DDS types for rustorb-dds's
-`rustorb_dds` package of `-Wbdds` / `-Wbdds_only`), C++11 (`-bc++11`) and
+`rustorb_dds` package of `-Wbdds` / `-Wbdds_only`), C++11 (`-bc++11`, with
+the DDS types for rustorb-dds's C++ binding of `-Wbdds` / `-Wbdds_only`) and
 Java (`-bjava`).
 
 | Directory | Package | Published as |
@@ -36,6 +37,8 @@ PYTHONPATH=path/to/idl_parser python3 -m unittest discover -s python/tests
   runtime: set `RUSTORB_SRC` to a checkout of rustorb/rustorb. Without it
   they are skipped. CI runs them against rustorb's main branch, and rustorb's
   own CI runs its runtime tests with the version of the generator it pins.
+  The C++ DDS output is compiled when `RUSTORB_DDS_SRC` names a checkout of
+  rustorb/rustorb-dds with the C++ binding (`cpp/include`).
 - `tests/idl/interop/` and `tests/idl/cpp/` are copies of rustorb's
   `interop/idl/` and `cpp/tests/idl/`.
 

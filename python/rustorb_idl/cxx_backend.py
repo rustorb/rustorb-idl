@@ -150,6 +150,10 @@ class Options(object):
     def __init__(self, header_suffix=".hh", source_suffix=".cc"):
         self.header_suffix = header_suffix
         self.source_suffix = source_suffix
+        # -Wbdds / -Wbdds_only: also / only the DDS type support (cxx_dds.py)
+        self.dds = False
+        self.dds_only = False
+        self.extensibility = "appendable"
 
 
 _NONE = object()
@@ -929,6 +933,11 @@ class CxxBackend(object):
             return _NONE
         raise fe.GeneratorError("unsupported union discriminator type %r" % disc)
 
+    def bad_param(self):
+        """The statement a union runs when the member asked for is not
+        the one its discriminator selects."""
+        return "throw ::CORBA::BAD_PARAM(0, ::CORBA::CompletionStatus::COMPLETED_NO);"
+
     def union(self, w, node):
         name = cxx_name(node.name)
         disc, cases, default_index = self.union_cases(node)
@@ -956,7 +965,7 @@ class CxxBackend(object):
         w("%s _d() const { return _m__d; }" % dt)
         w("void _d(%s d) {" % dt)
         w("  if (_rorb_member(d) != _rorb_member(_m__d))")
-        w("    throw ::CORBA::BAD_PARAM(0, ::CORBA::CompletionStatus::COMPLETED_NO);")
+        w("    " + self.bad_param())
         w("  _m__d = d;")
         w("}")
         if default_index < 0 and implicit is not _NONE:
@@ -1041,11 +1050,11 @@ class CxxBackend(object):
         w.indent()
         w("void _rorb_check(int i) const {")
         w("  if (_rorb_member(_m__d) != i)")
-        w("    throw ::CORBA::BAD_PARAM(0, ::CORBA::CompletionStatus::COMPLETED_NO);")
+        w("    " + self.bad_param())
         w("}")
         w("void _rorb_set(int i, %s d) {" % dt)
         w("  if (_rorb_member(d) != i)")
-        w("    throw ::CORBA::BAD_PARAM(0, ::CORBA::CompletionStatus::COMPLETED_NO);")
+        w("    " + self.bad_param())
         w("  _rorb_reset(d);")
         w("}")
         w()
