@@ -63,6 +63,13 @@ rustorb/rustorb; see its CHANGELOG.md for them.
   file's user exceptions so that an `ExceptionHolder` from another process
   can raise them. `Messaging` is the runtime's `<rustorb/messaging.h>`
   (needs a rustorb with callback AMI in C++), not `Messaging.hh`.
+- Java `-Wbami` (rustorb/rustorb#139): the stub classes `_<I>Stub` (not the
+  interfaces, which servants implement) get `sendc_<op>(ami_handler, in and
+  inout arguments)`, `sendc_get_<attr>` and `sendc_set_<attr>`, for the
+  interface and its bases, which call the runtime's `org.rustorb.Stubs.sendc`
+  with an `org.rustorb.SendcCall` (needs a rustorb with callback AMI in
+  Java); a reference is cast to the stub class to use them. `Messaging` is
+  the runtime's package `org.omg.Messaging`.
 - Rust: `-Wbxtypes[=PATH]` describes the DDS types (structs, unions, enums,
   bitmasks, typedefs) for DDS-XTypes, with impls of
   `rustorb_xtypes::types::DescribeType` from which rustorb-dds builds their
@@ -77,6 +84,8 @@ rustorb/rustorb; see its CHANGELOG.md for them.
   generated code need a rustorb checkout (`RUSTORB_SRC`)
 
 ### Fixed
+- Java: the skeleton (`<I>POA`) of an interface without operations no longer
+  has an unreachable `return` after its `switch`, which javac refused.
 
 - Java: the Helper of a union with no default member whose labels use
   every value of the discriminator (an enum) called `__default`, which

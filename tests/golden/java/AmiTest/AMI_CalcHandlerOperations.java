@@ -7,26 +7,26 @@ package AmiTest;
 public interface AMI_CalcHandlerOperations extends AmiTest.AMI_BaseHandlerOperations {
     void add(int ami_return_val, int carry);
 
-    void add_excep(Messaging.ExceptionHolder excep_holder);
+    void add_excep(org.omg.Messaging.ExceptionHolder excep_holder);
 
     void swap(AmiTest.Pair[] ami_return_val, AmiTest.Pair[] ps);
 
-    void swap_excep(Messaging.ExceptionHolder excep_holder);
+    void swap_excep(org.omg.Messaging.ExceptionHolder excep_holder);
 
     void nothing();
 
-    void nothing_excep(Messaging.ExceptionHolder excep_holder);
+    void nothing_excep(org.omg.Messaging.ExceptionHolder excep_holder);
 
     void get_label(String ami_return_val);
 
-    void get_label_excep(Messaging.ExceptionHolder excep_holder);
+    void get_label_excep(org.omg.Messaging.ExceptionHolder excep_holder);
 
     void set_label();
 
-    void set_label_excep(Messaging.ExceptionHolder excep_holder);
+    void set_label_excep(org.omg.Messaging.ExceptionHolder excep_holder);
 
     void get_count(int ami_return_val);
 
-    void get_count_excep(Messaging.ExceptionHolder excep_holder);
+    void get_count_excep(org.omg.Messaging.ExceptionHolder excep_holder);
 
 }

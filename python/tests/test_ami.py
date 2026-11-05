@@ -13,6 +13,15 @@ from _paths import CODEGEN, TEST_IDL, rustorb
 
 # Compiling the generated C++ needs the headers of rustorb (RUSTORB_SRC).
 CXX = (os.environ.get("CXX") or shutil.which("g++") or shutil.which("clang++")) if rustorb() else None
+# Compiling the generated Java needs javac 22 or later (FFM) and the runtime.
+JAVAC = shutil.which("javac") if rustorb() else None
+if JAVAC:
+    try:
+        _out = subprocess.run([JAVAC, "-version"], capture_output=True, text=True).stdout
+        if int(_out.split()[1].split(".")[0]) < 22:
+            JAVAC = None
+    except (OSError, IndexError, ValueError):
+        JAVAC = None
 
 if CODEGEN not in sys.path:
     sys.path.insert(0, CODEGEN)
@@ -289,6 +298,58 @@ class CommandLineTest(unittest.TestCase):
                     ],
                     check=True,
                 )
+
+    def java(self):
+        d = tempfile.mkdtemp(prefix="rustorb-idl-ami-")
+        self.addCleanup(shutil.rmtree, d)
+        for idl in ("AmiBase.idl", "Ami.idl"):
+            status, err = self.run_cli(["-bjava", "-Wbami", "-I", TEST_IDL, "-C", d, os.path.join(TEST_IDL, idl)])
+            self.assertEqual(status, 0, err)
+        return d
+
+    def test_java_sendc(self):
+        d = self.java()
+
+        def read(name):
+            with open(os.path.join(d, "AmiTest", name)) as f:
+                return f.read()
+
+        stub = read("_CalcStub.java")
+        # Messaging is the runtime's org.omg.Messaging.
+        self.assertIn("void add_excep(org.omg.Messaging.ExceptionHolder excep_holder);", read("AMI_CalcHandlerOperations.java"))
+        self.assertIn("org.omg.Messaging.ReplyHandler", read("AMI_BaseHandler.java"))
+        self.assertIn(
+            "public void sendc_add(final AmiTest.AMI_CalcHandler ami_handler, final int a, final int b) {", stub
+        )
+        self.assertIn("final class $Call extends org.rustorb.SendcCall {", stub)
+        self.assertIn("ami_handler.add($result, $o_carry);", stub)
+        self.assertIn("ami_handler.add_excep($h);", stub)
+        self.assertIn('org.rustorb.Stubs.sendc(this, "_set_label", ami_handler, new $Call());', stub)
+        # The operations of the bases, with their own handlers.
+        self.assertIn("public void sendc_ping(final AmiTest.AMI_BaseHandler ami_handler, final int x) {", stub)
+        self.assertIn("public void sendc_y(final AmiTest.AMI_ConcreteHandler ami_handler) {", read("_ConcreteStub.java"))
+        # Only on the stub class: servants do not implement them.
+        self.assertNotIn("sendc_", read("CalcOperations.java"))
+        self.assertNotIn("sendc_fire", stub)
+
+    @unittest.skipUnless(JAVAC, "needs javac 22 or later and the rustorb Java runtime: set RUSTORB_SRC to a rustorb checkout")
+    def test_java_compiles(self):
+        runtime = rustorb("java", "src", "main", "java")
+        if not os.path.exists(os.path.join(runtime, "org", "rustorb", "SendcCall.java")):
+            self.skipTest("this rustorb has no callback AMI in Java")
+        d = self.java()
+        sources = []
+        for top in (runtime, d):
+            for dirpath, _, names in os.walk(top):
+                sources += [os.path.join(dirpath, n) for n in names if n.endswith(".java")]
+        listing = os.path.join(d, "sources.txt")
+        with open(listing, "w") as f:
+            f.write("\n".join(sources))
+        subprocess.run(
+            [JAVAC, "--release", "22", "-encoding", "UTF-8", "-Xlint:all,-serial", "-Werror",
+             "-d", os.path.join(d, "classes"), "@" + listing],
+            check=True,
+        )
 
     @unittest.skipUnless(rustorb("python"), "needs the rustorb runtime: set RUSTORB_SRC to a rustorb checkout")
     def test_python_imports(self):

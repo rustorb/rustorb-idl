@@ -19,4 +19,19 @@ public class _ClashStub extends org.omg.CORBA.portable.ObjectImpl implements Ami
         $Call $c = new $Call();
         org.rustorb.Stubs.invoke(this, "op", false, $c);
     }
+
+    public void sendc_op(final AmiTest.AMI_AMI_ClashHandler ami_handler) {
+        final class $Call extends org.rustorb.SendcCall {
+            @Override
+            public void reply() {
+                ami_handler.op();
+            }
+
+            @Override
+            public void excep(org.omg.Messaging.ExceptionHolder $h) {
+                ami_handler.op_excep($h);
+            }
+        }
+        org.rustorb.Stubs.sendc(this, "op", ami_handler, new $Call());
+    }
 }

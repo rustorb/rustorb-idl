@@ -4,5 +4,5 @@
 
 package AmiTest;
 
-public interface AMI_AMI_ClashHandler extends AMI_AMI_ClashHandlerOperations, Messaging.ReplyHandler, org.omg.CORBA.portable.IDLEntity {
+public interface AMI_AMI_ClashHandler extends AMI_AMI_ClashHandlerOperations, org.omg.Messaging.ReplyHandler, org.omg.CORBA.portable.IDLEntity {
 }

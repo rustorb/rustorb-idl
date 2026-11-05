@@ -218,6 +218,10 @@ class JavaBackend(object):
             else:
                 parts.append(java_name(s.name) + "Package")
         prefix = tuple(p for p in getattr(self.opt, "package", "").split(".") if p)
+        top = chain[-1] if chain else node
+        if getattr(top, "filepath", None) == fe.MESSAGING_IDL:
+            # -Wbami: Messaging is the runtime's org.omg.Messaging.
+            prefix = ("org", "omg")
         return prefix + tuple(parts)
 
     def scoped(self, node, suffix=""):
@@ -1789,9 +1793,91 @@ class JavaBackend(object):
                 w("return $c.$result;")
             w.dedent()
             w("}")
+        self.sendc_methods(w, node)
         w.dedent()
         w("}")
         self.add(node, "_%sStub" % name, w.text())
+
+    def sendc_methods(self, w, node):
+        """-Wbami: the ``sendc_`` operations of the stub class (not of the
+        interface, which servants implement), for the interface and its
+        bases. The runtime copies the arguments when it is called (it
+        records what ``write`` writes); ``read`` reads the reply into the
+        fields that ``reply`` passes to the handler."""
+        for n in [node] + self.ancestors(node):
+            handler = fe.handler_of(self.full_iface(n))
+            if handler is None:
+                continue
+            htype = self.scoped(handler)
+            for sendc, reply, op, ins in cxx_backend.CxxBackend.sendc_operations(self, self.full_iface(n)):
+                opname, _, ret, params, excs, _, d = op
+                outs = [(p, t) for p, t, dr in params if dr in ("inout", "out")]
+                args = ["final %s ami_handler" % htype]
+                args += ["final %s %s" % (self.jtype(t, d), java_name(p)) for p, t in ins]
+                w()
+                w("public void %s(%s) {" % (java_name(sendc), ", ".join(args)))
+                w.indent()
+                w("final class $Call extends org.rustorb.SendcCall {")
+                w.indent()
+                results = []
+                if ret.kind != "void":
+                    results.append(("$result", ret))
+                results += [("$o_" + p, t) for p, t in outs]
+                for v, t in results:
+                    w("%s %s;" % (self.jtype(t, d), v))
+                if results:
+                    w()
+                if ins:
+                    w("@Override")
+                    w("public void write(%s $out) {" % OUT)
+                    w.indent()
+                    for p, t in ins:
+                        self.write(w, t, java_name(p), 0, d)
+                    w.dedent()
+                    w("}")
+                    w()
+                if results:
+                    w("@Override")
+                    w("public void read(%s $in) {" % IN)
+                    w.indent()
+                    for v, t in results:
+                        self.read(w, t, v, 0, d)
+                    w.dedent()
+                    w("}")
+                    w()
+                if excs:
+                    w("@Override")
+                    w(
+                        "public org.omg.CORBA.UserException readException(String $id, %s $in) {"
+                        % IN
+                    )
+                    w.indent()
+                    for e in excs:
+                        h = self.scoped(e, "Helper")
+                        w("if ($id.equals(%s.id())) {" % h)
+                        w("    return %s.read($in);" % h)
+                        w("}")
+                    w("return null;")
+                    w.dedent()
+                    w("}")
+                    w()
+                w("@Override")
+                w("public void reply() {")
+                w(
+                    "    ami_handler.%s(%s);"
+                    % (java_name(reply), ", ".join(v for v, _ in results))
+                )
+                w("}")
+                w()
+                w("@Override")
+                w("public void excep(org.omg.Messaging.ExceptionHolder $h) {")
+                w("    ami_handler.%s($h);" % java_name(reply + "_excep"))
+                w("}")
+                w.dedent()
+                w("}")
+                w('org.rustorb.Stubs.sendc(this, "%s", ami_handler, new $Call());' % opname)
+                w.dedent()
+                w("}")
 
     def skeleton(self, node):
         name = java_name(node.name)
@@ -1892,7 +1978,9 @@ class JavaBackend(object):
         w("    throw new org.omg.CORBA.BAD_OPERATION(0, org.omg.CORBA.CompletionStatus.COMPLETED_MAYBE);")
         w.dedent()
         w("}")
-        w("return $out;")
+        if ops:
+            # (Without operations the switch always throws.)
+            w("return $out;")
         w.dedent()
         w("}")
         w.dedent()

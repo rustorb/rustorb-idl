@@ -59,8 +59,8 @@ public abstract class AMI_CalcHandlerPOA extends org.omg.PortableServer.Servant
                 break;
             }
             case 1: {
-                Messaging.ExceptionHolder $a_excep_holder;
-                $a_excep_holder = Messaging.ExceptionHolderHelper.read($in);
+                org.omg.Messaging.ExceptionHolder $a_excep_holder;
+                $a_excep_holder = org.omg.Messaging.ExceptionHolderHelper.read($in);
                 this.add_excep($a_excep_holder);
                 $out = $rh.createReply();
                 break;
@@ -75,8 +75,8 @@ public abstract class AMI_CalcHandlerPOA extends org.omg.PortableServer.Servant
                 break;
             }
             case 3: {
-                Messaging.ExceptionHolder $a_excep_holder;
-                $a_excep_holder = Messaging.ExceptionHolderHelper.read($in);
+                org.omg.Messaging.ExceptionHolder $a_excep_holder;
+                $a_excep_holder = org.omg.Messaging.ExceptionHolderHelper.read($in);
                 this.swap_excep($a_excep_holder);
                 $out = $rh.createReply();
                 break;
@@ -87,8 +87,8 @@ public abstract class AMI_CalcHandlerPOA extends org.omg.PortableServer.Servant
                 break;
             }
             case 5: {
-                Messaging.ExceptionHolder $a_excep_holder;
-                $a_excep_holder = Messaging.ExceptionHolderHelper.read($in);
+                org.omg.Messaging.ExceptionHolder $a_excep_holder;
+                $a_excep_holder = org.omg.Messaging.ExceptionHolderHelper.read($in);
                 this.nothing_excep($a_excep_holder);
                 $out = $rh.createReply();
                 break;
@@ -101,8 +101,8 @@ public abstract class AMI_CalcHandlerPOA extends org.omg.PortableServer.Servant
                 break;
             }
             case 7: {
-                Messaging.ExceptionHolder $a_excep_holder;
-                $a_excep_holder = Messaging.ExceptionHolderHelper.read($in);
+                org.omg.Messaging.ExceptionHolder $a_excep_holder;
+                $a_excep_holder = org.omg.Messaging.ExceptionHolderHelper.read($in);
                 this.get_label_excep($a_excep_holder);
                 $out = $rh.createReply();
                 break;
@@ -113,8 +113,8 @@ public abstract class AMI_CalcHandlerPOA extends org.omg.PortableServer.Servant
                 break;
             }
             case 9: {
-                Messaging.ExceptionHolder $a_excep_holder;
-                $a_excep_holder = Messaging.ExceptionHolderHelper.read($in);
+                org.omg.Messaging.ExceptionHolder $a_excep_holder;
+                $a_excep_holder = org.omg.Messaging.ExceptionHolderHelper.read($in);
                 this.set_label_excep($a_excep_holder);
                 $out = $rh.createReply();
                 break;
@@ -127,8 +127,8 @@ public abstract class AMI_CalcHandlerPOA extends org.omg.PortableServer.Servant
                 break;
             }
             case 11: {
-                Messaging.ExceptionHolder $a_excep_holder;
-                $a_excep_holder = Messaging.ExceptionHolderHelper.read($in);
+                org.omg.Messaging.ExceptionHolder $a_excep_holder;
+                $a_excep_holder = org.omg.Messaging.ExceptionHolderHelper.read($in);
                 this.get_count_excep($a_excep_holder);
                 $out = $rh.createReply();
                 break;
@@ -141,8 +141,8 @@ public abstract class AMI_CalcHandlerPOA extends org.omg.PortableServer.Servant
                 break;
             }
             case 13: {
-                Messaging.ExceptionHolder $a_excep_holder;
-                $a_excep_holder = Messaging.ExceptionHolderHelper.read($in);
+                org.omg.Messaging.ExceptionHolder $a_excep_holder;
+                $a_excep_holder = org.omg.Messaging.ExceptionHolderHelper.read($in);
                 this.ping_excep($a_excep_holder);
                 $out = $rh.createReply();
                 break;

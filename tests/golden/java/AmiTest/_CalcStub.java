@@ -146,4 +146,178 @@ public class _CalcStub extends org.omg.CORBA.portable.ObjectImpl implements AmiT
         $Call $c = new $Call();
         org.rustorb.Stubs.invoke(this, "ping", false, $c);
     }
+
+    public void sendc_add(final AmiTest.AMI_CalcHandler ami_handler, final int a, final int b) {
+        final class $Call extends org.rustorb.SendcCall {
+            int $result;
+            int $o_carry;
+
+            @Override
+            public void write(org.omg.CORBA.portable.OutputStream $out) {
+                $out.write_long(a);
+                $out.write_long(b);
+            }
+
+            @Override
+            public void read(org.omg.CORBA.portable.InputStream $in) {
+                $result = $in.read_long();
+                $o_carry = $in.read_long();
+            }
+
+            @Override
+            public org.omg.CORBA.UserException readException(String $id, org.omg.CORBA.portable.InputStream $in) {
+                if ($id.equals(AmiTest.BusyHelper.id())) {
+                    return AmiTest.BusyHelper.read($in);
+                }
+                return null;
+            }
+
+            @Override
+            public void reply() {
+                ami_handler.add($result, $o_carry);
+            }
+
+            @Override
+            public void excep(org.omg.Messaging.ExceptionHolder $h) {
+                ami_handler.add_excep($h);
+            }
+        }
+        org.rustorb.Stubs.sendc(this, "add", ami_handler, new $Call());
+    }
+
+    public void sendc_swap(final AmiTest.AMI_CalcHandler ami_handler, final AmiTest.Pair[] ps, final String tag) {
+        final class $Call extends org.rustorb.SendcCall {
+            AmiTest.Pair[] $result;
+            AmiTest.Pair[] $o_ps;
+
+            @Override
+            public void write(org.omg.CORBA.portable.OutputStream $out) {
+                AmiTest.CalcPackage.PairsHelper.write($out, ps);
+                $out.write_string(tag);
+            }
+
+            @Override
+            public void read(org.omg.CORBA.portable.InputStream $in) {
+                $result = AmiTest.CalcPackage.PairsHelper.read($in);
+                $o_ps = AmiTest.CalcPackage.PairsHelper.read($in);
+            }
+
+            @Override
+            public void reply() {
+                ami_handler.swap($result, $o_ps);
+            }
+
+            @Override
+            public void excep(org.omg.Messaging.ExceptionHolder $h) {
+                ami_handler.swap_excep($h);
+            }
+        }
+        org.rustorb.Stubs.sendc(this, "swap", ami_handler, new $Call());
+    }
+
+    public void sendc_nothing(final AmiTest.AMI_CalcHandler ami_handler) {
+        final class $Call extends org.rustorb.SendcCall {
+            @Override
+            public void reply() {
+                ami_handler.nothing();
+            }
+
+            @Override
+            public void excep(org.omg.Messaging.ExceptionHolder $h) {
+                ami_handler.nothing_excep($h);
+            }
+        }
+        org.rustorb.Stubs.sendc(this, "nothing", ami_handler, new $Call());
+    }
+
+    public void sendc_get_label(final AmiTest.AMI_CalcHandler ami_handler) {
+        final class $Call extends org.rustorb.SendcCall {
+            String $result;
+
+            @Override
+            public void read(org.omg.CORBA.portable.InputStream $in) {
+                $result = $in.read_string();
+            }
+
+            @Override
+            public void reply() {
+                ami_handler.get_label($result);
+            }
+
+            @Override
+            public void excep(org.omg.Messaging.ExceptionHolder $h) {
+                ami_handler.get_label_excep($h);
+            }
+        }
+        org.rustorb.Stubs.sendc(this, "_get_label", ami_handler, new $Call());
+    }
+
+    public void sendc_set_label(final AmiTest.AMI_CalcHandler ami_handler, final String attr_label) {
+        final class $Call extends org.rustorb.SendcCall {
+            @Override
+            public void write(org.omg.CORBA.portable.OutputStream $out) {
+                $out.write_string(attr_label);
+            }
+
+            @Override
+            public void reply() {
+                ami_handler.set_label();
+            }
+
+            @Override
+            public void excep(org.omg.Messaging.ExceptionHolder $h) {
+                ami_handler.set_label_excep($h);
+            }
+        }
+        org.rustorb.Stubs.sendc(this, "_set_label", ami_handler, new $Call());
+    }
+
+    public void sendc_get_count(final AmiTest.AMI_CalcHandler ami_handler) {
+        final class $Call extends org.rustorb.SendcCall {
+            int $result;
+
+            @Override
+            public void read(org.omg.CORBA.portable.InputStream $in) {
+                $result = $in.read_long();
+            }
+
+            @Override
+            public void reply() {
+                ami_handler.get_count($result);
+            }
+
+            @Override
+            public void excep(org.omg.Messaging.ExceptionHolder $h) {
+                ami_handler.get_count_excep($h);
+            }
+        }
+        org.rustorb.Stubs.sendc(this, "_get_count", ami_handler, new $Call());
+    }
+
+    public void sendc_ping(final AmiTest.AMI_BaseHandler ami_handler, final int x) {
+        final class $Call extends org.rustorb.SendcCall {
+            AmiTest.Pair $o_p;
+
+            @Override
+            public void write(org.omg.CORBA.portable.OutputStream $out) {
+                $out.write_long(x);
+            }
+
+            @Override
+            public void read(org.omg.CORBA.portable.InputStream $in) {
+                $o_p = AmiTest.PairHelper.read($in);
+            }
+
+            @Override
+            public void reply() {
+                ami_handler.ping($o_p);
+            }
+
+            @Override
+            public void excep(org.omg.Messaging.ExceptionHolder $h) {
+                ami_handler.ping_excep($h);
+            }
+        }
+        org.rustorb.Stubs.sendc(this, "ping", ami_handler, new $Call());
+    }
 }

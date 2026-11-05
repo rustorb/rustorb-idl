@@ -27,4 +27,34 @@ public class _ConcreteStub extends org.omg.CORBA.portable.ObjectImpl implements 
         $Call $c = new $Call();
         org.rustorb.Stubs.invoke(this, "y", false, $c);
     }
+
+    public void sendc_y(final AmiTest.AMI_ConcreteHandler ami_handler) {
+        final class $Call extends org.rustorb.SendcCall {
+            @Override
+            public void reply() {
+                ami_handler.y();
+            }
+
+            @Override
+            public void excep(org.omg.Messaging.ExceptionHolder $h) {
+                ami_handler.y_excep($h);
+            }
+        }
+        org.rustorb.Stubs.sendc(this, "y", ami_handler, new $Call());
+    }
+
+    public void sendc_z(final AmiTest.AMI_ConcreteHandler ami_handler) {
+        final class $Call extends org.rustorb.SendcCall {
+            @Override
+            public void reply() {
+                ami_handler.z();
+            }
+
+            @Override
+            public void excep(org.omg.Messaging.ExceptionHolder $h) {
+                ami_handler.z_excep($h);
+            }
+        }
+        org.rustorb.Stubs.sendc(this, "z", ami_handler, new $Call());
+    }
 }
