@@ -14,7 +14,7 @@ stubs and skeletons for:
 - `-bjava`: the IDL to Java mapping (for the rustorb Java binding)
 
 `-Wbami` adds the `AMI_<I>Handler` interfaces of callback AMI (python,
-c++11, java).
+c++11, java), and in Python the `sendc_` operations of the stubs.
 
 ```sh
 pip install rustorb-idl

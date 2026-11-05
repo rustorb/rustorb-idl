@@ -110,6 +110,9 @@ class PythonBackend(object):
         self.idl_name = os.path.basename(spec.path)
         self.file_module = module_of_file(spec.path)
         self._modvars = {}
+        # The Messaging.idl that comes with rustorb-idl (-Wbami): its
+        # module is rustorb.Messaging, not generated code.
+        self.runtime_messaging = fe.MESSAGING_IDL in spec.included_files()
 
     # -- names -----------------------------------------------------------
 
@@ -231,14 +234,23 @@ class PythonBackend(object):
         w()
         w("_0_rt.check_version(%d)" % GENERATED_CODE_VERSION)
         w()
-        included = self.spec.included_files()
+        included = [f for f in self.spec.included_files() if f != fe.MESSAGING_IDL]
         if included:
             w("# Files included by %s" % self.idl_name)
             for f in included:
                 w("import %s  # %s" % (self.in_package(module_of_file(f)), os.path.basename(f)))
             w()
+        runtime = {}
+        if self.runtime_messaging:
+            runtime = {
+                self.py_module(("Messaging",)): "Messaging",
+                self.poa_module(("Messaging",)): "Messaging__POA",
+            }
         for pymod, var in sorted(self._modvars.items(), key=lambda kv: kv[0]):
-            w('%s = _0_rt.open_module("%s", __file__)' % (var, pymod))
+            if pymod in runtime:
+                w("from rustorb import %s as %s" % (runtime[pymod], var))
+            else:
+                w('%s = _0_rt.open_module("%s", __file__)' % (var, pymod))
         w()
         w.lines.extend(body.lines)
         return w.text()
@@ -693,6 +705,7 @@ class PythonBackend(object):
                 '    return %s._invoke(%s._NP_operations["%s"], %s)'
                 % (me, self.ref(node), name, py_tuple(params))
             )
+        self.sendc_methods(node)
         for a in fe.members_of(node):
             if fe.is_attribute(a):
                 attrs.append(a)
@@ -738,6 +751,62 @@ class PythonBackend(object):
         w("_0_rt.register_skeleton(%s)" % py_name(node.name))
         w("del %s" % py_name(node.name))
         w()
+
+    def sendc_methods(self, node):
+        """The ``sendc_`` operations of callback AMI (``-Wbami``) in the stub
+        of ``node``: each sends the operation of the interface that
+        declares it, for the handler's ``<op>`` and ``<op>_excep``."""
+        w = self.w
+        if fe.handler_of(node) is None:
+            return
+        for m, owner in self.sendc_list(node):
+            name, params, key, reply = m
+            me = "self" if "self" not in params else "_0_self"
+            handler = "ami_handler" if "ami_handler" not in params else "_0_ami_handler"
+            w()
+            w("def %s(%s):" % (py_name(name), ", ".join([me, handler] + params)))
+            w(
+                '    %s._sendc(%s._NP_operations["%s"], %s, "%s", "%s", %s)'
+                % (
+                    me,
+                    self.ref(owner),
+                    key,
+                    handler,
+                    py_name(reply),
+                    py_name(reply + "_excep"),
+                    py_tuple(params),
+                )
+            )
+
+    def sendc_list(self, node):
+        """``[((sendc name, Python parameters, operation key, handler
+        operation), declaring interface)]`` for the ``sendc_`` operations
+        of ``node``."""
+        out = []
+        for d, owner in fe.ami_operations(node):
+            if fe.is_operation(d):
+                params = [py_name(a.name) for a in d.arguments if a.direction in ("in", "inout")]
+                out.append(((fe.sendc_name(node, d.name), params, d.name, d.name), owner))
+            else:
+                out.append(
+                    (
+                        (fe.sendc_name(node, "get_" + d.name), [], "_get_" + d.name, "get_" + d.name),
+                        owner,
+                    )
+                )
+                if not d.readonly:
+                    out.append(
+                        (
+                            (
+                                fe.sendc_name(node, "set_" + d.name),
+                                ["attr_" + d.name],
+                                "_set_" + d.name,
+                                "set_" + d.name,
+                            ),
+                            owner,
+                        )
+                    )
+        return out
 
     def operations(self, node):
         """``[(name, Operation expression, Python parameter names)]`` for

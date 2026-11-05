@@ -8,7 +8,7 @@ import sys
 import tempfile
 import unittest
 
-from _paths import CODEGEN, TEST_IDL
+from _paths import CODEGEN, TEST_IDL, rustorb
 
 if CODEGEN not in sys.path:
     sys.path.insert(0, CODEGEN)
@@ -121,6 +121,42 @@ class ImpliedIdlTest(unittest.TestCase):
             "AMI_AMI_ClashHandlerHandler",
         )
 
+    def test_abstract_bases(self):
+        # Abstract interfaces have no handler: their operations are in the
+        # handlers (and sendc_ operations) of the concrete interfaces.
+        concrete = find(self.root, "AmiTest", "Concrete")
+        self.assertEqual(
+            signature(frontend.handler_of(concrete)),
+            [
+                "y()",
+                "y_excep(in ::Messaging::ExceptionHolder excep_holder)",
+                "z()",
+                "z_excep(in ::Messaging::ExceptionHolder excep_holder)",
+            ],
+        )
+        self.assertEqual(
+            [(m.name, owner.name) for m, owner in frontend.ami_operations(concrete)],
+            [("y", "Abstract"), ("z", "Concrete")],
+        )
+
+    def test_sendc_names(self):
+        calc = find(self.root, "AmiTest", "Calc")
+        self.assertEqual(frontend.sendc_name(calc, "add"), "sendc_add")
+        self.assertEqual(frontend.sendc_name(calc, "get_label"), "sendc_get_label")
+        d = tempfile.mkdtemp(prefix="rustorb-idl-ami-")
+        self.addCleanup(shutil.rmtree, d)
+        path = os.path.join(d, "Clash.idl")
+        with open(path, "w") as f:
+            f.write(
+                "interface B { void sendc_ami_go(); };\n"
+                "interface X : B { void go(); void sendc_go(); oneway void fire(); };\n"
+            )
+        root = frontend.load(path, [cli.IDL_DIR], ami=True).root
+        x = find(root, "X")
+        self.assertEqual(frontend.sendc_name(x, "go"), "sendc_ami_ami_go")
+        self.assertEqual(frontend.sendc_name(x, "sendc_go"), "sendc_sendc_go")
+        self.assertEqual([m.name for m, _ in frontend.ami_operations(x)], ["go", "sendc_go"])
+
     def test_no_handlers_for_local_and_abstract_interfaces(self):
         names = {d.name for d in find(self.root, "AmiTest").definitions}
         self.assertNotIn("AMI_LocalHandler", names)
@@ -161,6 +197,51 @@ class CommandLineTest(unittest.TestCase):
             self.assertEqual(status, 0, err)
             with open(os.path.join(d, path)) as f:
                 self.assertIn("AMI_CalcHandler", f.read(), backend)
+
+    def test_python_sendc(self):
+        d = tempfile.mkdtemp(prefix="rustorb-idl-ami-")
+        self.addCleanup(shutil.rmtree, d)
+        status, err = self.run_cli(["-bpython", "-Wbami", "-I", TEST_IDL, "-C", d, os.path.join(TEST_IDL, "Ami.idl")])
+        self.assertEqual(status, 0, err)
+        with open(os.path.join(d, "Ami_idl.py")) as f:
+            text = f.read()
+        # Messaging is the runtime's rustorb.Messaging.
+        self.assertIn("from rustorb import Messaging as _0_Messaging", text)
+        self.assertNotIn("import Messaging_idl", text)
+        self.assertIn(
+            'def sendc_add(self, ami_handler, a, b):\n'
+            '        self._sendc(_0_AmiTest.Calc._NP_operations["add"], ami_handler, "add", "add_excep", (a, b))',
+            text,
+        )
+        self.assertIn(
+            '"_set_label"], ami_handler, "set_label", "set_label_excep", (attr_label,))', text
+        )
+        self.assertIn('_0_AmiTest.Abstract._NP_operations["y"]', text)
+        self.assertNotIn("sendc_fire", text)
+        self.assertNotIn("sendc_x", text)
+
+    @unittest.skipUnless(rustorb("python"), "needs the rustorb runtime: set RUSTORB_SRC to a rustorb checkout")
+    def test_python_imports(self):
+        sys.path.insert(0, rustorb("python"))
+        self.addCleanup(sys.path.remove, rustorb("python"))
+        from rustorb import Messaging
+
+        if not hasattr(Messaging, "ReplyHandler"):
+            self.skipTest("this rustorb has no callback AMI in Python")
+        d = tempfile.mkdtemp(prefix="rustorb-idl-ami-")
+        self.addCleanup(shutil.rmtree, d)
+        for idl in ("AmiBase.idl", "Ami.idl"):
+            status, err = self.run_cli(["-bpython", "-Wbami", "-I", TEST_IDL, "-C", d, os.path.join(TEST_IDL, idl)])
+            self.assertEqual(status, 0, err)
+        sys.path.insert(0, d)
+        self.addCleanup(sys.path.remove, d)
+        import AmiTest
+        import AmiTest__POA
+
+        self.assertTrue(issubclass(AmiTest.AMI_ConcreteHandler, Messaging.ReplyHandler))
+        self.assertTrue(hasattr(AmiTest._objref_Calc, "sendc_add"))
+        self.assertTrue(hasattr(AmiTest._objref_Calc, "sendc_ping"))  # of Base
+        self.assertTrue(hasattr(AmiTest__POA.AMI_CalcHandler, "_NP_operations"))
 
 
 if __name__ == "__main__":

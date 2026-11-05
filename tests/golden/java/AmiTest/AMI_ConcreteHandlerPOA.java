@@ -9,8 +9,10 @@ public abstract class AMI_ConcreteHandlerPOA extends org.omg.PortableServer.Serv
     private static final java.util.Map<String, Integer> _methods = new java.util.HashMap<>();
 
     static {
-        _methods.put("z", 0);
-        _methods.put("z_excep", 1);
+        _methods.put("y", 0);
+        _methods.put("y_excep", 1);
+        _methods.put("z", 2);
+        _methods.put("z_excep", 3);
     }
 
     private static final String[] __ids = {"IDL:example.org/AmiTest/AMI_ConcreteHandler:1.0", "IDL:omg.org/Messaging/ReplyHandler:1.0"};
@@ -38,11 +40,23 @@ public abstract class AMI_ConcreteHandlerPOA extends org.omg.PortableServer.Serv
         }
         switch ($index) {
             case 0: {
-                this.z();
+                this.y();
                 $out = $rh.createReply();
                 break;
             }
             case 1: {
+                Messaging.ExceptionHolder $a_excep_holder;
+                $a_excep_holder = Messaging.ExceptionHolderHelper.read($in);
+                this.y_excep($a_excep_holder);
+                $out = $rh.createReply();
+                break;
+            }
+            case 2: {
+                this.z();
+                $out = $rh.createReply();
+                break;
+            }
+            case 3: {
                 Messaging.ExceptionHolder $a_excep_holder;
                 $a_excep_holder = Messaging.ExceptionHolderHelper.read($in);
                 this.z_excep($a_excep_holder);
