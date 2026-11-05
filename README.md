@@ -9,7 +9,8 @@ code for Rust (`-brust`, with the DDS type support of `-Wbdds` /
 `-Wbdds_only`), Python (`-bpython`, with the DDS types for rustorb-dds's
 `rustorb_dds` package of `-Wbdds` / `-Wbdds_only`), C++11 (`-bc++11`, with
 the DDS types for rustorb-dds's C++ binding of `-Wbdds` / `-Wbdds_only`) and
-Java (`-bjava`).
+Java (`-bjava`, with the DDS types for rustorb-dds's Java binding of
+`-Wbdds` / `-Wbdds_only`).
 
 | Directory | Package | Published as |
 | --- | --- | --- |
