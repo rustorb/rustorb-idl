@@ -19,6 +19,10 @@ const ::rustorb::detail::InterfaceRegistration _rorb_registration_6("IDL:example
 const ::rustorb::detail::InterfaceRegistration _rorb_registration_7("IDL:example.org/AmiTest/AMI_ConcreteHandler:1.0", {"IDL:example.org/AmiTest/AMI_ConcreteHandler:1.0", "IDL:omg.org/Messaging/ReplyHandler:1.0"});
 }  // namespace
 
+namespace {
+const ::rustorb::detail::UserExceptionRegistration<::AmiTest::Busy> _rorb_exception_0;
+}  // namespace
+
 ::IDL::traits<::CORBA::TypeCode>::ref_type AmiTest::_rorb_tc_Busy() {
   static const ::IDL::traits<::CORBA::TypeCode>::ref_type _tc = ::rustorb::detail::tc_struct(::CORBA::TCKind::tk_except, "IDL:example.org/AmiTest/Busy:1.0", "Busy", {{"retry_after", ::rustorb::cdr::type_code<int32_t>::get()}});
   return _tc;
@@ -187,6 +191,80 @@ void AmiTest::Calc::fire(int32_t n) {
       ::rustorb::detail::no_results());
 }
 
+void AmiTest::Calc::sendc_add(::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type ami_handler, int32_t a, int32_t b) {
+  ::rustorb::detail::sendc<::AmiTest::Busy>(this, "add", std::move(ami_handler),
+      [a, b](rorb_out* _out) {
+        ::rustorb::cdr::codec<int32_t>::write(_out, a);
+        ::rustorb::cdr::codec<int32_t>::write(_out, b);
+      },
+      [](rorb_in* _in) {
+        int32_t _rorb_ret{};
+        int32_t carry{};
+        ::rustorb::cdr::codec<int32_t>::read(_in, _rorb_ret);
+        ::rustorb::cdr::codec<int32_t>::read(_in, carry);
+        return [_rorb_ret = std::move(_rorb_ret), carry = std::move(carry)](const ::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type& _h) { _h->add(_rorb_ret, carry); };
+      },
+      [](const ::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type& _h, ::IDL::traits<::Messaging::ExceptionHolder>::ref_type _e) { _h->add_excep(std::move(_e)); });
+}
+
+void AmiTest::Calc::sendc_swap(::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type ami_handler, const ::AmiTest::Calc::Pairs& ps, const std::string& tag) {
+  ::rustorb::detail::sendc<>(this, "swap", std::move(ami_handler),
+      [ps, tag](rorb_out* _out) {
+        ::rustorb::cdr::codec<::AmiTest::Calc::Pairs>::write(_out, ps);
+        ::rustorb::cdr::codec<std::string>::write(_out, tag);
+      },
+      [](rorb_in* _in) {
+        ::AmiTest::Calc::Pairs _rorb_ret{};
+        ::AmiTest::Calc::Pairs ps{};
+        ::rustorb::cdr::codec<::AmiTest::Calc::Pairs>::read(_in, _rorb_ret);
+        ::rustorb::cdr::codec<::AmiTest::Calc::Pairs>::read(_in, ps);
+        return [_rorb_ret = std::move(_rorb_ret), ps = std::move(ps)](const ::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type& _h) { _h->swap(_rorb_ret, ps); };
+      },
+      [](const ::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type& _h, ::IDL::traits<::Messaging::ExceptionHolder>::ref_type _e) { _h->swap_excep(std::move(_e)); });
+}
+
+void AmiTest::Calc::sendc_nothing(::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type ami_handler) {
+  ::rustorb::detail::sendc<>(this, "nothing", std::move(ami_handler),
+      ::rustorb::detail::no_args(),
+      [](rorb_in*) {
+        return [](const ::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type& _h) { _h->nothing(); };
+      },
+      [](const ::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type& _h, ::IDL::traits<::Messaging::ExceptionHolder>::ref_type _e) { _h->nothing_excep(std::move(_e)); });
+}
+
+void AmiTest::Calc::sendc_get_label(::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type ami_handler) {
+  ::rustorb::detail::sendc<>(this, "_get_label", std::move(ami_handler),
+      ::rustorb::detail::no_args(),
+      [](rorb_in* _in) {
+        std::string _rorb_ret{};
+        ::rustorb::cdr::codec<std::string>::read(_in, _rorb_ret);
+        return [_rorb_ret = std::move(_rorb_ret)](const ::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type& _h) { _h->get_label(_rorb_ret); };
+      },
+      [](const ::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type& _h, ::IDL::traits<::Messaging::ExceptionHolder>::ref_type _e) { _h->get_label_excep(std::move(_e)); });
+}
+
+void AmiTest::Calc::sendc_set_label(::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type ami_handler, const std::string& attr_label) {
+  ::rustorb::detail::sendc<>(this, "_set_label", std::move(ami_handler),
+      [attr_label](rorb_out* _out) {
+        ::rustorb::cdr::codec<std::string>::write(_out, attr_label);
+      },
+      [](rorb_in*) {
+        return [](const ::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type& _h) { _h->set_label(); };
+      },
+      [](const ::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type& _h, ::IDL::traits<::Messaging::ExceptionHolder>::ref_type _e) { _h->set_label_excep(std::move(_e)); });
+}
+
+void AmiTest::Calc::sendc_get_count(::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type ami_handler) {
+  ::rustorb::detail::sendc<>(this, "_get_count", std::move(ami_handler),
+      ::rustorb::detail::no_args(),
+      [](rorb_in* _in) {
+        int32_t _rorb_ret{};
+        ::rustorb::cdr::codec<int32_t>::read(_in, _rorb_ret);
+        return [_rorb_ret = std::move(_rorb_ret)](const ::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type& _h) { _h->get_count(_rorb_ret); };
+      },
+      [](const ::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type& _h, ::IDL::traits<::Messaging::ExceptionHolder>::ref_type _e) { _h->get_count_excep(std::move(_e)); });
+}
+
 ::IDL::traits<::AmiTest::Calc>::ref_type POA_AmiTest::Calc::_this() {
   return ::IDL::traits<::AmiTest::Calc>::narrow(_rorb_this());
 }
@@ -290,6 +368,15 @@ void AmiTest::Clash::op() {
       ::rustorb::detail::no_results());
 }
 
+void AmiTest::Clash::sendc_op(::IDL::traits<::AmiTest::AMI_AMI_ClashHandler>::ref_type ami_handler) {
+  ::rustorb::detail::sendc<>(this, "op", std::move(ami_handler),
+      ::rustorb::detail::no_args(),
+      [](rorb_in*) {
+        return [](const ::IDL::traits<::AmiTest::AMI_AMI_ClashHandler>::ref_type& _h) { _h->op(); };
+      },
+      [](const ::IDL::traits<::AmiTest::AMI_AMI_ClashHandler>::ref_type& _h, ::IDL::traits<::Messaging::ExceptionHolder>::ref_type _e) { _h->op_excep(std::move(_e)); });
+}
+
 ::IDL::traits<::AmiTest::Clash>::ref_type POA_AmiTest::Clash::_this() {
   return ::IDL::traits<::AmiTest::Clash>::narrow(_rorb_this());
 }
@@ -325,6 +412,15 @@ void AmiTest::AMI_ClashHandler::other() {
   ::rustorb::detail::invoke<>(this, "other", false,
       ::rustorb::detail::no_args(),
       ::rustorb::detail::no_results());
+}
+
+void AmiTest::AMI_ClashHandler::sendc_other(::IDL::traits<::AmiTest::AMI_AMI_ClashHandlerHandler>::ref_type ami_handler) {
+  ::rustorb::detail::sendc<>(this, "other", std::move(ami_handler),
+      ::rustorb::detail::no_args(),
+      [](rorb_in*) {
+        return [](const ::IDL::traits<::AmiTest::AMI_AMI_ClashHandlerHandler>::ref_type& _h) { _h->other(); };
+      },
+      [](const ::IDL::traits<::AmiTest::AMI_AMI_ClashHandlerHandler>::ref_type& _h, ::IDL::traits<::Messaging::ExceptionHolder>::ref_type _e) { _h->other_excep(std::move(_e)); });
 }
 
 ::IDL::traits<::AmiTest::AMI_ClashHandler>::ref_type POA_AmiTest::AMI_ClashHandler::_this() {
@@ -368,6 +464,24 @@ void AmiTest::Concrete::y() {
   ::rustorb::detail::invoke<>(this, "y", false,
       ::rustorb::detail::no_args(),
       ::rustorb::detail::no_results());
+}
+
+void AmiTest::Concrete::sendc_y(::IDL::traits<::AmiTest::AMI_ConcreteHandler>::ref_type ami_handler) {
+  ::rustorb::detail::sendc<>(this, "y", std::move(ami_handler),
+      ::rustorb::detail::no_args(),
+      [](rorb_in*) {
+        return [](const ::IDL::traits<::AmiTest::AMI_ConcreteHandler>::ref_type& _h) { _h->y(); };
+      },
+      [](const ::IDL::traits<::AmiTest::AMI_ConcreteHandler>::ref_type& _h, ::IDL::traits<::Messaging::ExceptionHolder>::ref_type _e) { _h->y_excep(std::move(_e)); });
+}
+
+void AmiTest::Concrete::sendc_z(::IDL::traits<::AmiTest::AMI_ConcreteHandler>::ref_type ami_handler) {
+  ::rustorb::detail::sendc<>(this, "z", std::move(ami_handler),
+      ::rustorb::detail::no_args(),
+      [](rorb_in*) {
+        return [](const ::IDL::traits<::AmiTest::AMI_ConcreteHandler>::ref_type& _h) { _h->z(); };
+      },
+      [](const ::IDL::traits<::AmiTest::AMI_ConcreteHandler>::ref_type& _h, ::IDL::traits<::Messaging::ExceptionHolder>::ref_type _e) { _h->z_excep(std::move(_e)); });
 }
 
 ::IDL::traits<::AmiTest::Concrete>::ref_type POA_AmiTest::Concrete::_this() {

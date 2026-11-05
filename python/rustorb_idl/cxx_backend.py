@@ -172,6 +172,9 @@ class CxxBackend(object):
         self.values = []  # full valuetype and value box definitions
         self.supporting_values = []  # valuetypes that support an interface
         self.ns = ()  # namespaces open in the header
+        # The Messaging.idl that comes with rustorb-idl (-Wbami): the C++
+        # runtime has it (<rustorb/messaging.h>).
+        self.runtime_messaging = fe.MESSAGING_IDL in spec.included_files()
 
     # -- names -----------------------------------------------------------
 
@@ -351,6 +354,8 @@ class CxxBackend(object):
         w("#define %s" % guard)
         w()
         w("#include <rustorb/cdr.h>")
+        if self.runtime_messaging:
+            w("#include <rustorb/messaging.h>")
         w()
         w("#include <array>")
         w("#include <cstdint>")
@@ -358,7 +363,7 @@ class CxxBackend(object):
         w("#include <string>")
         w("#include <vector>")
         w()
-        included = self.spec.included_files()
+        included = [f for f in self.spec.included_files() if f != fe.MESSAGING_IDL]
         for f in included:
             w('#include "%s%s"' % (file_base(f), self.opt.header_suffix))
         if included:
@@ -1514,6 +1519,11 @@ class CxxBackend(object):
         name = cxx_name(node.name)
         bases = self.bases(node)
         local = bool(getattr(node, "is_local", False))
+        handler = fe.handler_of(node)
+        if handler is not None:
+            # Declared after the file's definitions; sendc_ takes it.
+            w("class %s;" % cxx_name(handler.name))
+            w()
         base_list = ["public virtual %s" % self.scoped(b) for b in bases]
         if all(self.is_abstract(b) for b in bases):
             base_list.append("public virtual ::CORBA::%s" % ("LocalObject" if local else "Object"))
@@ -1534,6 +1544,8 @@ class CxxBackend(object):
         if not local:
             for _, method, ret, params, _, _, d in self.abstract_operations(node):
                 w("%s override;" % self.signature(method, ret, params, d))
+            for sendc in self.sendc_operations(node):
+                w("virtual %s;" % self.sendc_signature(node, sendc))
         w.dedent()
         w()
         w(" protected:")
@@ -1542,6 +1554,90 @@ class CxxBackend(object):
         w()
         if not local:
             self.interfaces.append(node)
+
+    # -- callback AMI (-Wbami) ----------------------------------------------
+
+    def sendc_operations(self, node):
+        """``[(sendc name, handler operation, op tuple of operations(),
+        [(param, Type)])]``: the ``sendc_`` operations of the stub of
+        ``node``, for its operations and attributes and those of its
+        abstract bases."""
+        if fe.handler_of(node) is None:
+            return []
+        out = []
+        for m, owner in fe.ami_operations(node):
+            for op in self.operations(owner):
+                if op[6] is not m:
+                    continue
+                name, _, ret, params, _, _, _ = op
+                if fe.is_attribute(m):
+                    reply = ("get_" if name.startswith("_get_") else "set_") + m.name
+                    ins = [("attr_" + m.name, t) for _, t, _ in params]
+                else:
+                    reply = m.name
+                    ins = [(p, t) for p, t, dr in params if dr in ("in", "inout")]
+                out.append((fe.sendc_name(node, reply), reply, op, ins))
+        return out
+
+    def handler_ref(self, node):
+        return "::IDL::traits<%s>::ref_type" % self.scoped(fe.handler_of(node))
+
+    def sendc_signature(self, node, sendc, qualifier=""):
+        name, _, op, ins = sendc
+        d = op[6]
+        args = ["%s ami_handler" % self.handler_ref(node)]
+        args += ["%s %s" % (self.in_type(t, d), cxx_name(p)) for p, t in ins]
+        return "void %s%s(%s)" % (qualifier, cxx_name(name), ", ".join(args))
+
+    def sendc_source(self, w, node):
+        """The ``sendc_`` operations of the stub of ``node``: the arguments
+        are copied into the function that writes them; the reply is read
+        into a function that calls the handler."""
+        href = self.handler_ref(node)
+        for sendc in self.sendc_operations(node):
+            _, reply, op, ins = sendc
+            opname, _, ret, params, excs, _, d = op
+            outs = [(p, t) for p, t, dr in params if dr in ("inout", "out")]
+            w("%s {" % self.sendc_signature(node, sendc, self.scoped(node)[2:] + "::"))
+            w.indent()
+            exc_types = ", ".join(self.scoped(e) for e in excs)
+            w(
+                '::rustorb::detail::sendc<%s>(this, "%s", std::move(ami_handler),'
+                % (exc_types, opname)
+            )
+            w.indent()
+            w.indent()
+            if ins:
+                w("[%s](rorb_out* _out) {" % ", ".join(cxx_name(p) for p, _ in ins))
+                for p, t in ins:
+                    w("  %s::write(_out, %s);" % (self.codec_of(t, d), cxx_name(p)))
+                w("},")
+            else:
+                w("::rustorb::detail::no_args(),")
+            results = []
+            if ret.kind != "void":
+                results.append(("_rorb_ret", ret))
+            results += [(cxx_name(p), t) for p, t in outs]
+            w("[](rorb_in* _in) {" if results else "[](rorb_in*) {")
+            for v, t in results:
+                w("  %s %s{};" % (self.ctype(t, d), v))
+            for v, t in results:
+                w("  %s::read(_in, %s);" % (self.codec_of(t, d), v))
+            captures = ", ".join("%s = std::move(%s)" % (v, v) for v, _ in results)
+            w(
+                "  return [%s](const %s& _h) { _h->%s(%s); };"
+                % (captures, href, cxx_name(reply), ", ".join(v for v, _ in results))
+            )
+            w("},")
+            w(
+                "[](const %s& _h, ::IDL::traits<::Messaging::ExceptionHolder>::ref_type _e) {"
+                " _h->%s(std::move(_e)); });" % (href, cxx_name(reply + "_excep"))
+            )
+            w.dedent()
+            w.dedent()
+            w.dedent()
+            w("}")
+            w()
 
     def abstract_interface(self, w, node):
         """An abstract interface: a class with pure virtual operations that
@@ -1782,6 +1878,19 @@ class CxxBackend(object):
                 )
             w("}  // namespace")
             w()
+        if self.runtime_messaging:
+            # -Wbami: an ExceptionHolder from another process raises the
+            # user exceptions by their repository ids.
+            excs = [node for kind, node in self.codecs if kind == "exception"]
+            if excs:
+                w("namespace {")
+                for i, node in enumerate(excs):
+                    w(
+                        "const ::rustorb::detail::UserExceptionRegistration<%s> _rorb_exception_%d;"
+                        % (self.scoped(node), i)
+                    )
+                w("}  // namespace")
+                w()
         self.typecode_definitions(w)
         for node in self.values:
             self.value_source(w, node)
@@ -1795,6 +1904,7 @@ class CxxBackend(object):
             self.stub_source(w, node)
         for node in self.interfaces:
             self.stub_source(w, node)
+            self.sendc_source(w, node)
             self.skeleton_source(w, node)
         return w.text()
 

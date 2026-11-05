@@ -30,6 +30,13 @@ rustorb/rustorb; see its CHANGELOG.md for them.
   (needs a rustorb with callback AMI in Python). The `Messaging` module is
   the runtime's `rustorb.Messaging`, not generated code. The handlers of
   interfaces with abstract bases have the operations of those bases too.
+- C++ `-Wbami` (rustorb/rustorb#141): the stubs get virtual
+  `sendc_<op>(ami_handler, in and inout arguments)`, `sendc_get_<attr>` and
+  `sendc_set_<attr>`, which call the runtime's `rustorb::detail::sendc` with
+  the operation's raises clause, and the generated source registers the
+  file's user exceptions so that an `ExceptionHolder` from another process
+  can raise them. `Messaging` is the runtime's `<rustorb/messaging.h>`
+  (needs a rustorb with callback AMI in C++), not `Messaging.hh`.
 - Rust: `-Wbxtypes[=PATH]` describes the DDS types (structs, unions, enums,
   bitmasks, typedefs) for DDS-XTypes, with impls of
   `rustorb_xtypes::types::DescribeType` from which rustorb-dds builds their

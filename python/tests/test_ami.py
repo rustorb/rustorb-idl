@@ -4,11 +4,15 @@ import contextlib
 import io
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
 
 from _paths import CODEGEN, TEST_IDL, rustorb
+
+# Compiling the generated C++ needs the headers of rustorb (RUSTORB_SRC).
+CXX = (os.environ.get("CXX") or shutil.which("g++") or shutil.which("clang++")) if rustorb() else None
 
 if CODEGEN not in sys.path:
     sys.path.insert(0, CODEGEN)
@@ -219,6 +223,72 @@ class CommandLineTest(unittest.TestCase):
         self.assertIn('_0_AmiTest.Abstract._NP_operations["y"]', text)
         self.assertNotIn("sendc_fire", text)
         self.assertNotIn("sendc_x", text)
+
+    def cxx(self):
+        d = tempfile.mkdtemp(prefix="rustorb-idl-ami-")
+        self.addCleanup(shutil.rmtree, d)
+        for idl in ("AmiBase.idl", "Ami.idl"):
+            status, err = self.run_cli(["-bc++11", "-Wbami", "-I", TEST_IDL, "-C", d, os.path.join(TEST_IDL, idl)])
+            self.assertEqual(status, 0, err)
+        return d
+
+    def test_cxx_sendc(self):
+        d = self.cxx()
+        with open(os.path.join(d, "Ami.hh")) as f:
+            header = f.read()
+        with open(os.path.join(d, "Ami.cc")) as f:
+            source = f.read()
+        # Messaging is the runtime's rustorb/messaging.h.
+        self.assertIn("#include <rustorb/messaging.h>", header)
+        self.assertNotIn('"Messaging.hh"', header)
+        self.assertIn(
+            "virtual void sendc_add(::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type ami_handler, "
+            "int32_t a, int32_t b);",
+            header,
+        )
+        self.assertIn("const std::string& attr_label);", header)
+        self.assertIn("virtual void sendc_y(::IDL::traits<::AmiTest::AMI_ConcreteHandler>::ref_type", header)
+        self.assertNotIn("sendc_fire", header)
+        # The raises clause, and the handler's operations.
+        self.assertIn('::rustorb::detail::sendc<::AmiTest::Busy>(this, "add", std::move(ami_handler),', source)
+        self.assertIn("_h->add_excep(std::move(_e));", source)
+        self.assertIn('::rustorb::detail::sendc<>(this, "_set_label"', source)
+        # The user exceptions of the file, for holders from other processes.
+        self.assertIn("::rustorb::detail::UserExceptionRegistration<::AmiTest::Busy>", source)
+        # Without -Wbami, none of it.
+        plain = tempfile.mkdtemp(prefix="rustorb-idl-ami-")
+        self.addCleanup(shutil.rmtree, plain)
+        for idl in ("AmiBase.idl", "Ami.idl"):
+            status, err = self.run_cli(["-bc++11", "-I", TEST_IDL, "-C", plain, os.path.join(TEST_IDL, idl)])
+            self.assertEqual(status, 0, err)
+        with open(os.path.join(plain, "Ami.cc")) as f:
+            self.assertNotIn("sendc", f.read())
+
+    @unittest.skipUnless(
+        rustorb("cpp", "include", "rustorb", "messaging.h") and CXX,
+        "needs a C++ compiler and the rustorb C++ runtime: set RUSTORB_SRC to a rustorb checkout",
+    )
+    def test_cxx_compiles(self):
+        if not os.path.exists(rustorb("cpp", "include", "rustorb", "messaging.h")):
+            self.skipTest("this rustorb has no callback AMI in C++")
+        d = self.cxx()
+        for base in ("AmiBase", "Ami"):
+            with self.subTest(base):
+                subprocess.run(
+                    [
+                        CXX,
+                        "-std=c++17",
+                        "-fsyntax-only",
+                        "-Wall",
+                        "-Wextra",
+                        "-Werror",
+                        "-I" + rustorb("cpp", "include"),
+                        "-I" + rustorb("crates", "rustorb-ffi", "include"),
+                        "-I" + d,
+                        os.path.join(d, base + ".cc"),
+                    ],
+                    check=True,
+                )
 
     @unittest.skipUnless(rustorb("python"), "needs the rustorb runtime: set RUSTORB_SRC to a rustorb checkout")
     def test_python_imports(self):

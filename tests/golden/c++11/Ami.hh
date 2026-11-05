@@ -6,6 +6,7 @@
 #define RUSTORB_IDL_AMI_HH
 
 #include <rustorb/cdr.h>
+#include <rustorb/messaging.h>
 
 #include <array>
 #include <cstdint>
@@ -14,7 +15,6 @@
 #include <vector>
 
 #include "AmiBase.hh"
-#include "Messaging.hh"
 
 static_assert(::rustorb::generated_code_version == 3,
               "Ami.idl was generated for another version of rustorb");
@@ -48,6 +48,8 @@ namespace AmiTest {
   ::IDL::traits<::CORBA::TypeCode>::ref_type _rorb_tc_Busy();
   extern const ::IDL::traits<::CORBA::TypeCode>::ref_type _tc_Busy;
 
+  class AMI_CalcHandler;
+
   class Calc : public virtual ::AmiTest::Base {
    public:
     static constexpr const char* _rorb_repository_id = "IDL:example.org/AmiTest/Calc:1.0";
@@ -65,6 +67,12 @@ namespace AmiTest {
     virtual void label(const std::string& value);
     virtual int32_t count();
     virtual void fire(int32_t n);
+    virtual void sendc_add(::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type ami_handler, int32_t a, int32_t b);
+    virtual void sendc_swap(::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type ami_handler, const ::AmiTest::Calc::Pairs& ps, const std::string& tag);
+    virtual void sendc_nothing(::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type ami_handler);
+    virtual void sendc_get_label(::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type ami_handler);
+    virtual void sendc_set_label(::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type ami_handler, const std::string& attr_label);
+    virtual void sendc_get_count(::IDL::traits<::AmiTest::AMI_CalcHandler>::ref_type ami_handler);
 
    protected:
     Calc() = default;
@@ -73,12 +81,15 @@ namespace AmiTest {
   ::IDL::traits<::CORBA::TypeCode>::ref_type _rorb_tc_Calc();
   extern const ::IDL::traits<::CORBA::TypeCode>::ref_type _tc_Calc;
 
+  class AMI_AMI_ClashHandler;
+
   class Clash : public virtual ::CORBA::Object {
    public:
     static constexpr const char* _rorb_repository_id = "IDL:example.org/AmiTest/Clash:1.0";
     Clash(::rustorb::detail::adopt_t, rorb_object* _h) noexcept : ::CORBA::Object(::rustorb::detail::adopt, _h) {}
 
     virtual void op();
+    virtual void sendc_op(::IDL::traits<::AmiTest::AMI_AMI_ClashHandler>::ref_type ami_handler);
 
    protected:
     Clash() = default;
@@ -87,12 +98,15 @@ namespace AmiTest {
   ::IDL::traits<::CORBA::TypeCode>::ref_type _rorb_tc_Clash();
   extern const ::IDL::traits<::CORBA::TypeCode>::ref_type _tc_Clash;
 
+  class AMI_AMI_ClashHandlerHandler;
+
   class AMI_ClashHandler : public virtual ::CORBA::Object {
    public:
     static constexpr const char* _rorb_repository_id = "IDL:example.org/AmiTest/AMI_ClashHandler:1.0";
     AMI_ClashHandler(::rustorb::detail::adopt_t, rorb_object* _h) noexcept : ::CORBA::Object(::rustorb::detail::adopt, _h) {}
 
     virtual void other();
+    virtual void sendc_other(::IDL::traits<::AmiTest::AMI_AMI_ClashHandlerHandler>::ref_type ami_handler);
 
    protected:
     AMI_ClashHandler() = default;
@@ -135,6 +149,8 @@ namespace AmiTest {
   ::IDL::traits<::CORBA::TypeCode>::ref_type _rorb_tc_Abstract();
   extern const ::IDL::traits<::CORBA::TypeCode>::ref_type _tc_Abstract;
 
+  class AMI_ConcreteHandler;
+
   class Concrete : public virtual ::AmiTest::Abstract, public virtual ::CORBA::Object {
    public:
     static constexpr const char* _rorb_repository_id = "IDL:example.org/AmiTest/Concrete:1.0";
@@ -142,6 +158,8 @@ namespace AmiTest {
 
     virtual void z();
     void y() override;
+    virtual void sendc_y(::IDL::traits<::AmiTest::AMI_ConcreteHandler>::ref_type ami_handler);
+    virtual void sendc_z(::IDL::traits<::AmiTest::AMI_ConcreteHandler>::ref_type ami_handler);
 
    protected:
     Concrete() = default;
