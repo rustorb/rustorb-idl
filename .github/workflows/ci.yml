@@ -55,9 +55,10 @@ jobs:
   with-rustorb:
     name: Generated code against rustorb main
     # The tests that compile and run the generated code, with the runtimes
-    # of rustorb's and rustorb-dds's main branches (RUSTORB_SRC,
-    # RUSTORB_DDS_SRC). A change of the generated code
+    # of rustorb's main branch (RUSTORB_SRC). A change of the generated code
     # that needs a runtime change fails here until rustorb has it.
+    # rustorb-dds is private, so the C++ DDS output (RUSTORB_DDS_SRC) is
+    # compiled in rustorb-dds's own CI, which checks in generated code.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,10 +71,6 @@ jobs:
         with:
           repository: rustorb/rustorb
           path: rustorb
-      - uses: actions/checkout@v4
-        with:
-          repository: rustorb/rustorb-dds
-          path: rustorb-dds
       - uses: actions/setup-python@v5
         with:
           python-version: "3.13"
@@ -89,7 +86,6 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}/idl_parser
           RUSTORB_SRC: ${{ github.workspace }}/rustorb
-          RUSTORB_DDS_SRC: ${{ github.workspace }}/rustorb-dds
 
   rust:
     name: rustorb-codegen
