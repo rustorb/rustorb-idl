@@ -24,6 +24,8 @@ CASES = [
     ("python", ["-bpython", "-Wbdds_only"], "DdsMapping.idl"),
     ("c++11", ["-bc++11"], "cpp/CxxMapping.idl"),
     ("c++11", ["-bc++11"], "CosNaming.idl"),
+    ("c++11", ["-bc++11", "-Wbdds_only"], "DdsMapping.idl"),
+    ("c++11", ["-bc++11", "-Wbdds"], "DdsCorba.idl"),
     ("java", ["-bjava"], "cpp/CxxMapping.idl"),
     ("java", ["-bjava"], "CosNaming.idl"),
     ("python", ["-bpython", "-Wbami"], "Ami.idl"),

@@ -8,6 +8,19 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ### Added
 
+- C++: `-Wbdds` / `-Wbdds_only` write `Foo_dds.hh`, the DDS type support of
+  the structs, unions, enums, bitmasks and typedefs of the file for
+  rustorb-dds's C++ binding (the ISO/IEC C++ PSM, `<dds/dds.hpp>`):
+  `rustorb::dds::codec<T>`, which builds each type through rustorb-dds's C
+  ABI and writes and reads its values, and `dds::topic::is_topic_type` and
+  `topic_type_name` for topic types (rustorb/rustorb-dds#45). Their
+  TypeObjects are those of other implementations for the same IDL.
+  `-Wbdds_only` writes `Foo.hh` with only the types and constants, which
+  need nothing but the standard library, and allows `@optional`
+  (`std::optional`), `@external`, `@value`, `int8` and `bitmask`; bounded
+  strings and sequences are then `std::string` and `std::vector`.
+  `-Wbdds` writes `Foo_dds.hh` beside the CORBA code, for types used by
+  both. `-Wbextensibility` applies to them too.
 - Python: `-Wbdds` / `-Wbdds_only` write `Foo_dds.py`, the DDS types of the
   file (structs, unions, enums, bitmasks, typedefs, constants) declared for
   rustorb-dds's Python package `rustorb_dds`, whose TypeObjects match those
