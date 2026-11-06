@@ -36,7 +36,7 @@ public class AMI_ConcreteHandlerPOATie extends AMI_ConcreteHandlerPOA {
     }
 
     @Override
-    public void y_excep(Messaging.ExceptionHolder excep_holder) {
+    public void y_excep(org.omg.Messaging.ExceptionHolder excep_holder) {
         _impl.y_excep(excep_holder);
     }
 
@@ -46,7 +46,7 @@ public class AMI_ConcreteHandlerPOATie extends AMI_ConcreteHandlerPOA {
     }
 
     @Override
-    public void z_excep(Messaging.ExceptionHolder excep_holder) {
+    public void z_excep(org.omg.Messaging.ExceptionHolder excep_holder) {
         _impl.z_excep(excep_holder);
     }
 }

@@ -36,7 +36,7 @@ public class AMI_AMI_ClashHandlerPOATie extends AMI_AMI_ClashHandlerPOA {
     }
 
     @Override
-    public void op_excep(Messaging.ExceptionHolder excep_holder) {
+    public void op_excep(org.omg.Messaging.ExceptionHolder excep_holder) {
         _impl.op_excep(excep_holder);
     }
 }

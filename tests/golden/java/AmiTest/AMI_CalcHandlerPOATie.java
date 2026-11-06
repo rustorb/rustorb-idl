@@ -36,7 +36,7 @@ public class AMI_CalcHandlerPOATie extends AMI_CalcHandlerPOA {
     }
 
     @Override
-    public void add_excep(Messaging.ExceptionHolder excep_holder) {
+    public void add_excep(org.omg.Messaging.ExceptionHolder excep_holder) {
         _impl.add_excep(excep_holder);
     }
 
@@ -46,7 +46,7 @@ public class AMI_CalcHandlerPOATie extends AMI_CalcHandlerPOA {
     }
 
     @Override
-    public void swap_excep(Messaging.ExceptionHolder excep_holder) {
+    public void swap_excep(org.omg.Messaging.ExceptionHolder excep_holder) {
         _impl.swap_excep(excep_holder);
     }
 
@@ -56,7 +56,7 @@ public class AMI_CalcHandlerPOATie extends AMI_CalcHandlerPOA {
     }
 
     @Override
-    public void nothing_excep(Messaging.ExceptionHolder excep_holder) {
+    public void nothing_excep(org.omg.Messaging.ExceptionHolder excep_holder) {
         _impl.nothing_excep(excep_holder);
     }
 
@@ -66,7 +66,7 @@ public class AMI_CalcHandlerPOATie extends AMI_CalcHandlerPOA {
     }
 
     @Override
-    public void get_label_excep(Messaging.ExceptionHolder excep_holder) {
+    public void get_label_excep(org.omg.Messaging.ExceptionHolder excep_holder) {
         _impl.get_label_excep(excep_holder);
     }
 
@@ -76,7 +76,7 @@ public class AMI_CalcHandlerPOATie extends AMI_CalcHandlerPOA {
     }
 
     @Override
-    public void set_label_excep(Messaging.ExceptionHolder excep_holder) {
+    public void set_label_excep(org.omg.Messaging.ExceptionHolder excep_holder) {
         _impl.set_label_excep(excep_holder);
     }
 
@@ -86,7 +86,7 @@ public class AMI_CalcHandlerPOATie extends AMI_CalcHandlerPOA {
     }
 
     @Override
-    public void get_count_excep(Messaging.ExceptionHolder excep_holder) {
+    public void get_count_excep(org.omg.Messaging.ExceptionHolder excep_holder) {
         _impl.get_count_excep(excep_holder);
     }
 
@@ -96,7 +96,7 @@ public class AMI_CalcHandlerPOATie extends AMI_CalcHandlerPOA {
     }
 
     @Override
-    public void ping_excep(Messaging.ExceptionHolder excep_holder) {
+    public void ping_excep(org.omg.Messaging.ExceptionHolder excep_holder) {
         _impl.ping_excep(excep_holder);
     }
 }

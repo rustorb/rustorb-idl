@@ -21,11 +21,11 @@ public class _AMI_ConcreteHandlerStub extends org.omg.CORBA.portable.ObjectImpl 
     }
 
     @Override
-    public void y_excep(final Messaging.ExceptionHolder excep_holder) {
+    public void y_excep(final org.omg.Messaging.ExceptionHolder excep_holder) {
         final class $Call extends org.rustorb.Call {
             @Override
             public void write(org.omg.CORBA.portable.OutputStream $out) {
-                Messaging.ExceptionHolderHelper.write($out, excep_holder);
+                org.omg.Messaging.ExceptionHolderHelper.write($out, excep_holder);
             }
         }
         $Call $c = new $Call();
@@ -41,11 +41,11 @@ public class _AMI_ConcreteHandlerStub extends org.omg.CORBA.portable.ObjectImpl 
     }
 
     @Override
-    public void z_excep(final Messaging.ExceptionHolder excep_holder) {
+    public void z_excep(final org.omg.Messaging.ExceptionHolder excep_holder) {
         final class $Call extends org.rustorb.Call {
             @Override
             public void write(org.omg.CORBA.portable.OutputStream $out) {
-                Messaging.ExceptionHolderHelper.write($out, excep_holder);
+                org.omg.Messaging.ExceptionHolderHelper.write($out, excep_holder);
             }
         }
         $Call $c = new $Call();

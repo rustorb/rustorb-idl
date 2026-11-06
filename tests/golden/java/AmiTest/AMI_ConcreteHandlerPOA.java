@@ -45,8 +45,8 @@ public abstract class AMI_ConcreteHandlerPOA extends org.omg.PortableServer.Serv
                 break;
             }
             case 1: {
-                Messaging.ExceptionHolder $a_excep_holder;
-                $a_excep_holder = Messaging.ExceptionHolderHelper.read($in);
+                org.omg.Messaging.ExceptionHolder $a_excep_holder;
+                $a_excep_holder = org.omg.Messaging.ExceptionHolderHelper.read($in);
                 this.y_excep($a_excep_holder);
                 $out = $rh.createReply();
                 break;
@@ -57,8 +57,8 @@ public abstract class AMI_ConcreteHandlerPOA extends org.omg.PortableServer.Serv
                 break;
             }
             case 3: {
-                Messaging.ExceptionHolder $a_excep_holder;
-                $a_excep_holder = Messaging.ExceptionHolderHelper.read($in);
+                org.omg.Messaging.ExceptionHolder $a_excep_holder;
+                $a_excep_holder = org.omg.Messaging.ExceptionHolderHelper.read($in);
                 this.z_excep($a_excep_holder);
                 $out = $rh.createReply();
                 break;

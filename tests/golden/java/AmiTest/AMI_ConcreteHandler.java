@@ -4,5 +4,5 @@
 
 package AmiTest;
 
-public interface AMI_ConcreteHandler extends AMI_ConcreteHandlerOperations, Messaging.ReplyHandler, org.omg.CORBA.portable.IDLEntity {
+public interface AMI_ConcreteHandler extends AMI_ConcreteHandlerOperations, org.omg.Messaging.ReplyHandler, org.omg.CORBA.portable.IDLEntity {
 }

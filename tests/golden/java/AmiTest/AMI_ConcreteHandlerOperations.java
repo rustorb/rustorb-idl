@@ -4,13 +4,13 @@
 
 package AmiTest;
 
-public interface AMI_ConcreteHandlerOperations extends Messaging.ReplyHandlerOperations {
+public interface AMI_ConcreteHandlerOperations extends org.omg.Messaging.ReplyHandlerOperations {
     void y();
 
-    void y_excep(Messaging.ExceptionHolder excep_holder);
+    void y_excep(org.omg.Messaging.ExceptionHolder excep_holder);
 
     void z();
 
-    void z_excep(Messaging.ExceptionHolder excep_holder);
+    void z_excep(org.omg.Messaging.ExceptionHolder excep_holder);
 
 }

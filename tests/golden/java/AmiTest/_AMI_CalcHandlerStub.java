@@ -26,11 +26,11 @@ public class _AMI_CalcHandlerStub extends org.omg.CORBA.portable.ObjectImpl impl
     }
 
     @Override
-    public void add_excep(final Messaging.ExceptionHolder excep_holder) {
+    public void add_excep(final org.omg.Messaging.ExceptionHolder excep_holder) {
         final class $Call extends org.rustorb.Call {
             @Override
             public void write(org.omg.CORBA.portable.OutputStream $out) {
-                Messaging.ExceptionHolderHelper.write($out, excep_holder);
+                org.omg.Messaging.ExceptionHolderHelper.write($out, excep_holder);
             }
         }
         $Call $c = new $Call();
@@ -51,11 +51,11 @@ public class _AMI_CalcHandlerStub extends org.omg.CORBA.portable.ObjectImpl impl
     }
 
     @Override
-    public void swap_excep(final Messaging.ExceptionHolder excep_holder) {
+    public void swap_excep(final org.omg.Messaging.ExceptionHolder excep_holder) {
         final class $Call extends org.rustorb.Call {
             @Override
             public void write(org.omg.CORBA.portable.OutputStream $out) {
-                Messaging.ExceptionHolderHelper.write($out, excep_holder);
+                org.omg.Messaging.ExceptionHolderHelper.write($out, excep_holder);
             }
         }
         $Call $c = new $Call();
@@ -71,11 +71,11 @@ public class _AMI_CalcHandlerStub extends org.omg.CORBA.portable.ObjectImpl impl
     }
 
     @Override
-    public void nothing_excep(final Messaging.ExceptionHolder excep_holder) {
+    public void nothing_excep(final org.omg.Messaging.ExceptionHolder excep_holder) {
         final class $Call extends org.rustorb.Call {
             @Override
             public void write(org.omg.CORBA.portable.OutputStream $out) {
-                Messaging.ExceptionHolderHelper.write($out, excep_holder);
+                org.omg.Messaging.ExceptionHolderHelper.write($out, excep_holder);
             }
         }
         $Call $c = new $Call();
@@ -95,11 +95,11 @@ public class _AMI_CalcHandlerStub extends org.omg.CORBA.portable.ObjectImpl impl
     }
 
     @Override
-    public void get_label_excep(final Messaging.ExceptionHolder excep_holder) {
+    public void get_label_excep(final org.omg.Messaging.ExceptionHolder excep_holder) {
         final class $Call extends org.rustorb.Call {
             @Override
             public void write(org.omg.CORBA.portable.OutputStream $out) {
-                Messaging.ExceptionHolderHelper.write($out, excep_holder);
+                org.omg.Messaging.ExceptionHolderHelper.write($out, excep_holder);
             }
         }
         $Call $c = new $Call();
@@ -115,11 +115,11 @@ public class _AMI_CalcHandlerStub extends org.omg.CORBA.portable.ObjectImpl impl
     }
 
     @Override
-    public void set_label_excep(final Messaging.ExceptionHolder excep_holder) {
+    public void set_label_excep(final org.omg.Messaging.ExceptionHolder excep_holder) {
         final class $Call extends org.rustorb.Call {
             @Override
             public void write(org.omg.CORBA.portable.OutputStream $out) {
-                Messaging.ExceptionHolderHelper.write($out, excep_holder);
+                org.omg.Messaging.ExceptionHolderHelper.write($out, excep_holder);
             }
         }
         $Call $c = new $Call();
@@ -139,11 +139,11 @@ public class _AMI_CalcHandlerStub extends org.omg.CORBA.portable.ObjectImpl impl
     }
 
     @Override
-    public void get_count_excep(final Messaging.ExceptionHolder excep_holder) {
+    public void get_count_excep(final org.omg.Messaging.ExceptionHolder excep_holder) {
         final class $Call extends org.rustorb.Call {
             @Override
             public void write(org.omg.CORBA.portable.OutputStream $out) {
-                Messaging.ExceptionHolderHelper.write($out, excep_holder);
+                org.omg.Messaging.ExceptionHolderHelper.write($out, excep_holder);
             }
         }
         $Call $c = new $Call();
@@ -163,11 +163,11 @@ public class _AMI_CalcHandlerStub extends org.omg.CORBA.portable.ObjectImpl impl
     }
 
     @Override
-    public void ping_excep(final Messaging.ExceptionHolder excep_holder) {
+    public void ping_excep(final org.omg.Messaging.ExceptionHolder excep_holder) {
         final class $Call extends org.rustorb.Call {
             @Override
             public void write(org.omg.CORBA.portable.OutputStream $out) {
-                Messaging.ExceptionHolderHelper.write($out, excep_holder);
+                org.omg.Messaging.ExceptionHolderHelper.write($out, excep_holder);
             }
         }
         $Call $c = new $Call();

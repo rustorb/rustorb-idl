@@ -4,9 +4,9 @@
 
 package AmiTest;
 
-public interface AMI_AMI_ClashHandlerOperations extends Messaging.ReplyHandlerOperations {
+public interface AMI_AMI_ClashHandlerOperations extends org.omg.Messaging.ReplyHandlerOperations {
     void op();
 
-    void op_excep(Messaging.ExceptionHolder excep_holder);
+    void op_excep(org.omg.Messaging.ExceptionHolder excep_holder);
 
 }
