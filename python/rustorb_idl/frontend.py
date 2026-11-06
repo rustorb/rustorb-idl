@@ -727,7 +727,13 @@ def idl_type_text(t):
     if isinstance(t, idl_type.IDLFixed):
         return "fixed<%d, %d>" % (t.digits, t.scale)
     if isinstance(t, idl_type.IDLPrimitive):
-        return " ".join(t.name.split())
+        name = " ".join(t.name.split())
+        # The built-in types of module CORBA (CORBA::TypeCode, ...) are
+        # primitives named "TypeCode", ...; outside module CORBA only the
+        # scoped name means them.
+        if name in idl_type.builtin_corba_types:
+            return "::CORBA::" + name
+        return name
     if getattr(t, "parent", None) is not None and getattr(t, "name", None):
         if (is_interface(t) or is_valuetype(t)) and is_forward(t):
             t = full_definition(t) or t
