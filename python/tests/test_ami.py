@@ -181,6 +181,24 @@ class ImpliedIdlTest(unittest.TestCase):
         self.assertNotIn("AMI_CalcHandler", names)
         self.assertNotIn("Messaging", {d.name for d in root.definitions})
 
+    def test_builtin_corba_types(self):
+        # CORBA::TypeCode is a primitive named "TypeCode" in idl_parser;
+        # the implied IDL must scope it, as a bare TypeCode means nothing
+        # outside module CORBA.
+        d = tempfile.mkdtemp(prefix="rustorb-idl-ami-")
+        self.addCleanup(shutil.rmtree, d)
+        idl = os.path.join(d, "Tc.idl")
+        with open(idl, "w") as f:
+            f.write("module Tc { interface I { CORBA::TypeCode tc(in CORBA::TypeCode t); }; };\n")
+        root = frontend.load(idl, [d, cli.IDL_DIR], ami=True).root
+        self.assertEqual(
+            signature(find(root, "Tc", "AMI_IHandler")),
+            [
+                "tc(in ::CORBA::TypeCode ami_return_val)",
+                "tc_excep(in ::Messaging::ExceptionHolder excep_holder)",
+            ],
+        )
+
 
 class CommandLineTest(unittest.TestCase):
     def run_cli(self, argv):

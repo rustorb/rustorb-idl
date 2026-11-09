@@ -49,7 +49,9 @@ rustorb/rustorb; see its CHANGELOG.md for them.
   backends write the handlers as ordinary interfaces; the `sendc_` operations
   of the stubs and the runtime code of `Messaging` come with each language.
   `Messaging.idl` ships in `rustorb-idl --idl-dir`. `-brust -Wbami` is an
-  error (Rust has the `op_async` methods).
+  error (Rust has the `op_async` methods). The handlers name the built-in
+  types of module CORBA by their scoped name (`::CORBA::TypeCode`), so
+  operations that use them get handlers too.
 - Python `-Wbami` (rustorb/rustorb#138): the stubs get
   `sendc_<op>(ami_handler, in and inout arguments)`, `sendc_get_<attr>` and
   `sendc_set_<attr>`, which call the runtime's `CORBA.Object._sendc`
