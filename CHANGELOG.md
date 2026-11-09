@@ -6,6 +6,8 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-09
+
 ### Added
 
 - Java: `-Wbdds` / `-Wbdds_only` write a class `<Name>Codec` next to each
