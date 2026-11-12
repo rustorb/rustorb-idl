@@ -1971,11 +1971,7 @@ class RustBackend(DdsMixin):
 
     def signature(self, opname, method, ret, params, excs, d, owner, cur):
         """``(method, args, return type)``."""
-        if getattr(d, "contexts", None):
-            # The core has no CORBA::Context to send after the arguments.
-            raise fe.GeneratorError(
-                "the context clause of %s is not supported by the Rust backend" % opname, d
-            )
+        fe.reject_context(d, self.LANGUAGE, opname)
         args = []
         for p, t, direction in params:
             pn = ident(snake(p))

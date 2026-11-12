@@ -70,5 +70,89 @@ class OutputDirectoryTest(unittest.TestCase):
                     self.assertEqual(cli.main(args), 0)
 
 
+class ContextClauseTest(unittest.TestCase):
+    """No backend supports the context clause of an operation (rustorb#151):
+    the runtimes have no CORBA::Context to send after the arguments."""
+
+    BACKENDS = ("python", "c++11", "java", "rust")
+    LANGUAGES = {"python": "Python", "c++11": "C++", "java": "Java", "rust": "Rust"}
+
+    def setUp(self):
+        self.dir = tempfile.mkdtemp(prefix="rustorb-idl-ctx-")
+        self.addCleanup(shutil.rmtree, self.dir)
+
+    def write(self, name, text):
+        path = os.path.join(self.dir, name)
+        with open(path, "w") as f:
+            f.write(text)
+        return path
+
+    def run_cli(self, argv):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            status = cli.main(argv)
+        return status, err.getvalue()
+
+    def test_operation_with_context_is_an_error(self):
+        idl = self.write(
+            "Ctx.idl",
+            "module Ctx {\n"
+            "  interface I {\n"
+            "    void plain();\n"
+            '    void f(in long a) context ("A", "B*");\n'
+            "  };\n"
+            "};\n",
+        )
+        for backend in self.BACKENDS:
+            with self.subTest(backend):
+                out = os.path.join(self.dir, "out-" + backend)
+                status, err = self.run_cli(["-b" + backend, "-C", out, idl])
+                self.assertEqual(status, 1, err)
+                self.assertIn(
+                    "%s:4: the context clause of f is not supported by the %s backend"
+                    % (idl, self.LANGUAGES[backend]),
+                    err,
+                )
+
+    def test_context_in_valuetype_and_abstract_interface(self):
+        cases = {
+            "abstract": "module A { abstract interface B { void f() context (\"x\"); }; interface I : B {}; };\n",
+            "value": "module V { valuetype W { public long x; void f() context (\"x\"); }; };\n",
+        }
+        for name, text in cases.items():
+            idl = self.write("Ctx_%s.idl" % name, text)
+            for backend in self.BACKENDS:
+                with self.subTest(name=name, backend=backend):
+                    out = os.path.join(self.dir, "out-%s-%s" % (name, backend))
+                    status, err = self.run_cli(["-b" + backend, "-C", out, idl])
+                    self.assertEqual(status, 1, err)
+                    self.assertIn("the context clause of f is not supported", err)
+
+    def test_with_ami(self):
+        # The sendc_ operation of an operation with a context clause would
+        # have the clause too (the implied IDL), so -Wbami is an error the
+        # same way, also for an abstract base of another file, whose
+        # operations get sendc_ operations in the derived interface.
+        base = self.write(
+            "CtxBase.idl", 'module CtxBase { abstract interface B { void f() context ("x"); }; };\n'
+        )
+        main = self.write(
+            "CtxAmi.idl",
+            '#include "CtxBase.idl"\nmodule CtxAmi { interface I : CtxBase::B { void g(); }; };\n',
+        )
+        for backend in ("python", "c++11", "java"):
+            with self.subTest(backend):
+                out = os.path.join(self.dir, "out-ami-" + backend)
+                status, err = self.run_cli(
+                    ["-b" + backend, "-Wbami", "-I", self.dir, "-C", out, main]
+                )
+                self.assertEqual(status, 1, err)
+                self.assertIn(
+                    "%s:1: the context clause of f is not supported by the %s backend"
+                    % (base, self.LANGUAGES[backend]),
+                    err,
+                )
+
+
 if __name__ == "__main__":
     unittest.main()

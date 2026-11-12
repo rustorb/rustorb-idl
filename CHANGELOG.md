@@ -6,6 +6,19 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ## [Unreleased]
 
+### Changed
+
+- Python, C++ and Java: an operation with a context clause
+  (`context ("a", "b*")`) is now an error, with the file and the line, as
+  it already was for Rust: "the context clause of f is not supported by
+  the Python backend". The clause was dropped without a word before, so
+  the requests did not have the form a peer that follows the IDL reads
+  (it reads a `CORBA::Context` after the arguments, which the runtimes
+  cannot send). The same holds with `-Wbami` for the `sendc_` operations,
+  also those of abstract bases in other files, and for the operations of
+  valuetypes. The Python `Operation` of an interface no longer has the
+  context names (rustorb/rustorb#151).
+
 ## [0.3.0] - 2026-11-09
 
 ### Added
