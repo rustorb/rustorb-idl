@@ -1482,6 +1482,7 @@ class CxxBackend(object):
         ops = []
         for d in fe.members_of(node):
             if fe.is_operation(d):
+                fe.reject_context(d, self.LANGUAGE)
                 ret = fe.type_of(d.returns, d)
                 params = [
                     (a.name, fe.type_of(a.type, a), a.direction) for a in d.arguments

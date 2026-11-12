@@ -104,6 +104,8 @@ class Options(object):
 
 
 class PythonBackend(object):
+    LANGUAGE = "Python"
+
     def __init__(self, spec, options=None):
         self.spec = spec
         self.opt = options or Options()
@@ -561,6 +563,12 @@ class PythonBackend(object):
         for i in supported:
             if i.is_local:
                 raise fe.GeneratorError("a valuetype cannot support a local interface", node)
+        # The operations of a valuetype are not written (the application
+        # implements them), but their context clauses are refused as by the
+        # other backends.
+        for d in fe.members_of(node):
+            if fe.is_operation(d):
+                fe.reject_context(d, self.LANGUAGE)
         base = fe.concrete_base(node)
         if node.is_abstract:
             modifier = "VM_ABSTRACT"
@@ -785,6 +793,8 @@ class PythonBackend(object):
         out = []
         for d, owner in fe.ami_operations(node):
             if fe.is_operation(d):
+                # Also for the operations of abstract bases in other files.
+                fe.reject_context(d, self.LANGUAGE)
                 params = [py_name(a.name) for a in d.arguments if a.direction in ("in", "inout")]
                 out.append(((fe.sendc_name(node, d.name), params, d.name, d.name), owner))
             else:
@@ -814,6 +824,7 @@ class PythonBackend(object):
         ops = []
         for d in fe.members_of(node):
             if fe.is_operation(d):
+                fe.reject_context(d, self.LANGUAGE)
                 ins, outs = [], []
                 ret = fe.type_of(d.returns, d)
                 if ret.kind != "void":
@@ -827,15 +838,14 @@ class PythonBackend(object):
                     if a.direction in ("out", "inout"):
                         outs.append(t)
                 excs = [self.tc_ref(e) for e in fe.raised_exceptions(d)]
-                ctx = list(getattr(d, "contexts", []) or [])
-                ops.append((d.name, self.op_expr(d.name, ins, outs, excs, d.oneway, ctx), params))
+                ops.append((d.name, self.op_expr(d.name, ins, outs, excs, d.oneway), params))
             elif fe.is_attribute(d):
                 t = self.tc(fe.type_of(d.type, d))
                 get_ex = [self.tc_ref(e) for e in _resolve_exceptions(d, d.getraises)]
                 ops.append(
                     (
                         "_get_" + d.name,
-                        self.op_expr("_get_" + d.name, [], [t], get_ex, False, []),
+                        self.op_expr("_get_" + d.name, [], [t], get_ex, False),
                         [],
                     )
                 )
@@ -844,19 +854,17 @@ class PythonBackend(object):
                     ops.append(
                         (
                             "_set_" + d.name,
-                            self.op_expr("_set_" + d.name, [t], [], set_ex, False, []),
+                            self.op_expr("_set_" + d.name, [t], [], set_ex, False),
                             ["value"],
                         )
                     )
         return ops
 
-    def op_expr(self, name, ins, outs, excs, oneway, contexts):
+    def op_expr(self, name, ins, outs, excs, oneway):
         tup = py_tuple
         args = ['"%s"' % name, tup(ins), tup(outs), tup(excs)]
-        if oneway or contexts:
-            args.append("True" if oneway else "False")
-        if contexts:
-            args.append(tup(['"%s"' % c for c in contexts]))
+        if oneway:
+            args.append("True")
         return "_0_rt.Operation(%s)" % ", ".join(args)
 
     # -- packages --------------------------------------------------------

@@ -422,7 +422,6 @@ class GeneratorTest(unittest.TestCase):
               const Other::E C_OTHER = Other::E2;
               interface I {
                 attribute long x getraises (Bad) setraises (Bad);
-                void ctx(in long a) context ("A", "B*");
                 any get_any(in any a, in CORBA::TypeCode t);
                 Object get_obj();
               };
@@ -435,7 +434,6 @@ class GeneratorTest(unittest.TestCase):
         ops = Edge.I._NP_operations
         self.assertEqual(ops["_get_x"].exceptions, (Edge._tc_Bad,))
         self.assertEqual(ops["_set_x"].exceptions, (Edge._tc_Bad,))
-        self.assertEqual(ops["ctx"].contexts, ("A", "B*"))
         self.assertEqual(ops["get_any"].in_types, (CORBA.TC_any, CORBA.TC_TypeCode))
         self.assertIs(ops["get_obj"].out_types[0], CORBA.TC_Object)
         self.assertTrue(Edge._tc_ByTypedef.discriminator_type().equivalent(CORBA.TC_long))

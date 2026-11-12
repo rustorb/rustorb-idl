@@ -448,6 +448,21 @@ def raised_exceptions(op):
     return list(op.exceptions or [])
 
 
+def reject_context(op, language, name=None):
+    """Raises :class:`GeneratorError` if the operation ``op`` has a context
+    clause (``context ("a", "b*")``), which no backend supports: the runtimes
+    have no ``CORBA::Context`` to send after the arguments, and a peer that
+    follows the IDL (or a servant that ignores the clause) would read the
+    request body differently. ``name`` is the operation name in the message
+    (``op.name`` by default)."""
+    if getattr(op, "contexts", None):
+        raise GeneratorError(
+            "the context clause of %s is not supported by the %s backend"
+            % (name or op.name, language),
+            op,
+        )
+
+
 # ---------------------------------------------------------------------------
 # IDL 4 annotations
 
