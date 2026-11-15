@@ -6,6 +6,8 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-15
+
 ### Changed
 
 - Python, C++ and Java: an operation with a context clause
