@@ -6,6 +6,20 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ## [Unreleased]
 
+### Added
+
+- Rust: with `-Wbdds_only -Wbxtypes`, the interfaces marked `@DDSService`
+  get the function-call style of DDS-RPC 1.0 for rustorb-dds: the implied
+  IDL of the Enhanced Service Mapping (the In, Out and Result structs of
+  each operation and attribute accessor, and the Request and Reply
+  structs, `@mutable @autoid(HASH)` with optional members), a trait the
+  service implements, `<I>Client` and `<I>Server<S>`. A server announces
+  the topics of its bases as topic aliases, so a client of a base calls
+  it. The structs marked `@RPCRequestType` and `@RPCReplyType` implement
+  rustorb-dds's `BasicRequest` and `BasicReply`. `dds_rpc.idl` (the common
+  types of DDS-RPC) comes with the generator, and `-Wbrustorb_dds=PATH`
+  sets the path of rustorb-dds (docs/dds-rpc.md, rustorb/rustorb-dds#72).
+
 ## [0.4.0] - 2026-11-15
 
 ### Changed
