@@ -39,12 +39,16 @@ The options follow omniidl where they mean the same thing:
   -Wbxtypes[=PATH]  with -Wbdds or -Wbdds_only, also describe the types for
                     DDS-XTypes (TypeObject), with rustorb-xtypes at PATH
                     (rust, default ::rustorb_xtypes)
+  -Wbrustorb_dds=PATH
+                    the path of rustorb-dds, for the DDS services
+                    (@DDSService interfaces, DDS-RPC) of -Wbdds_only
+                    (rust, default ::rustorb_dds)
   -Wbextensibility=KIND
                     the extensibility of types without @final, @appendable
                     or @mutable: final, appendable (the default) or mutable
                     (rust, python, c++11, java; DDS)
 
-The standard IDL files that come with rustorb-idl (CosNaming.idl, Messaging.idl) are in the
+The standard IDL files that come with rustorb-idl (CosNaming.idl, Messaging.idl, dds_rpc.idl) are in the
 directory `rustorb-idl --idl-dir` prints, which is also searched for
 #include files after the -I directories.
 """
@@ -87,7 +91,7 @@ def parse_args(argv):
     ap.add_argument(
         "--idl-dir",
         action="store_true",
-        help="print the directory of the standard IDL files (CosNaming.idl, Messaging.idl) and exit",
+        help="print the directory of the standard IDL files (CosNaming.idl, Messaging.idl, dds_rpc.idl) and exit",
     )
     ap.add_argument("files", nargs="+", metavar="FILE.idl")
     return ap.parse_args(argv)
@@ -139,6 +143,8 @@ def main(argv=None):
             if not path.startswith(("::", "crate::", "super::", "self::")):
                 path = "::" + path
             options.externs[module] = path
+        elif backend is rust_backend and opt.startswith("brustorb_dds="):
+            options.rustorb_dds = opt[len("brustorb_dds=") :]
         elif backend is rust_backend and opt.startswith("bcore="):
             options.core = opt[len("bcore=") :]
         elif backend is rust_backend and opt == "bno_rustfmt":
@@ -177,7 +183,10 @@ def main(argv=None):
             giop = not (
                 backend in (rust_backend, python_backend, cxx_backend, java_backend) and options.dds_only
             )
-            spec = frontend.load(path, args.include + [IDL_DIR], defines, args.encoding, giop=giop, ami=ami)
+            rpc = backend is rust_backend and options.dds_only
+            spec = frontend.load(
+                path, args.include + [IDL_DIR], defines, args.encoding, giop=giop, ami=ami, rpc=rpc
+            )
             if backend is python_backend and (options.dds or options.dds_only):
                 os.makedirs(args.outdir, exist_ok=True)
                 python_dds.write_outputs(spec, args.outdir, options.package, options.extensibility)

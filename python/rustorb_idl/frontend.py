@@ -76,12 +76,14 @@ class Spec(object):
         return files
 
 
-def load(path, include_dirs=(), defines=None, encoding=None, giop=True, ami=False):
+def load(path, include_dirs=(), defines=None, encoding=None, giop=True, ami=False, rpc=False):
     """Parses the IDL file ``path``. With ``giop`` (code for CORBA), the
     annotations GIOP has no form for are refused (:func:`check_annotations`);
     without it (code for DDS only) they are left to the backend. With
     ``ami``, the implied IDL of callback AMI is added (:func:`add_ami`);
-    ``Messaging.idl`` must then be on ``include_dirs``."""
+    ``Messaging.idl`` must then be on ``include_dirs``. With ``rpc``, the
+    implied IDL of the DDS services is added (:func:`rpc.add_rpc`), with
+    ``dds_rpc.idl`` on ``include_dirs``."""
     path = os.path.abspath(path)
     p = idl_parser_mod.IDLParser(
         idl_dirs=[os.path.abspath(d) for d in include_dirs],
@@ -106,6 +108,10 @@ def load(path, include_dirs=(), defines=None, encoding=None, giop=True, ami=Fals
         check_annotations(root)
     if ami:
         add_ami(p, root, path)
+    if rpc:
+        from . import rpc as rpc_mod
+
+        rpc_mod.add_rpc(p, root, path)
     return Spec(root, path)
 
 
