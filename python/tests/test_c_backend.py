@@ -165,9 +165,44 @@ class CBackendTest(unittest.TestCase):
         self.assertIn("const rustorb_c_type LocalTest_Greeter__desc = {CORBA_tk_local_interface,", c)
         self.assertNotIn("LocalTest_Remote__create", h)
 
-    def test_options(self):
+    def test_ami(self):
+        # -Wbami: the handlers, with Messaging from <rustorb/messaging.h>,
+        # and the sendc_ functions after each handler.
+        outdir = os.path.join(OUT, "ami")
         path = os.path.join(INTEROP_IDL, "InteropTest.idl")
-        self.assertEqual(cli.main(["-bc", "-Wbami", "-C", OUT, path]), 2)
+        self.assertEqual(cli.main(["-bc", "-Wbami", "-C", outdir, path]), 0)
+        h = read(os.path.join(outdir, "InteropTest.h"))
+        c = read(os.path.join(outdir, "InteropTest.c"))
+        self.assertIn("#include <rustorb/messaging.h>", h)
+        self.assertNotIn('#include "Messaging.h"', h)
+        self.assertIn("typedef CORBA_Object InteropTest_AMI_EchoHandler;", h)
+        self.assertIn("  POA_Messaging_ReplyHandler__epv* Messaging_ReplyHandler_epv;", h)
+        self.assertIn("  void (*divide)(PortableServer_Servant _servant, CORBA_long ami_return_val, "
+                      "CORBA_long remainder, CORBA_Environment* _ev);", h)
+        self.assertIn("  void (*divide_excep)(PortableServer_Servant _servant, "
+                      "const Messaging_ExceptionHolder* excep_holder, CORBA_Environment* _ev);", h)
+        self.assertIn("void InteropTest_Echo_sendc_swap(InteropTest_Echo _obj, "
+                      "InteropTest_AMI_EchoHandler ami_handler, CORBA_long a, CORBA_long b, "
+                      "CORBA_Environment* _ev);", h)
+        self.assertIn("void InteropTest_Echo_sendc_set_counter(InteropTest_Echo _obj, "
+                      "InteropTest_AMI_EchoHandler ami_handler, CORBA_long attr_counter, "
+                      "CORBA_Environment* _ev);", h)
+        # After the handler, whose operations it names.
+        self.assertLess(h.index("extern const rustorb_c_operation InteropTest_AMI_EchoHandler__op_swap;"),
+                        h.index("InteropTest_Echo_sendc_swap("))
+        self.assertIn("  rustorb_c_sendc(_obj, &InteropTest_Echo__op__get_counter, NULL, ami_handler, "
+                      "&InteropTest_AMI_EchoHandler__op_get_counter, "
+                      "&InteropTest_AMI_EchoHandler__op_get_counter_excep, _ev);", c)
+        self.assertIn('"IDL:omg.org/Messaging/ReplyHandler:1.0"', c)
+        self.assertIn("&Messaging_ExceptionHolder__desc", c)
+        if CC:
+            r = subprocess.run(
+                [CC, "-std=c99", "-Wall", "-Wextra", "-Wpedantic", "-Werror", "-fsyntax-only",
+                 "-I", outdir, "-I", RUNTIME, "-I", FFI, os.path.join(outdir, "InteropTest.c")],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(r.returncode, 0, r.stderr[-4000:])
 
     def test_unsupported(self):
         # rustorb#187: valuetypes, abstract interfaces; and the IDL 4

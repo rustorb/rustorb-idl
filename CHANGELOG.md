@@ -8,6 +8,14 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ### Added
 
+- C: `-bc -Wbami`, callback AMI (rustorb/rustorb#187). The implied
+  `AMI_<I>Handler` interfaces are generated as interfaces on
+  `Messaging_ReplyHandler` (from rustorb's `<rustorb/messaging.h>`), and
+  after each handler come the `sendc_` functions of its interface,
+  `<I>_sendc_<op>(obj, ami_handler, <in and inout values>, ev)`, over the
+  runtime's `rustorb_c_sendc`. `Messaging::ExceptionHolder` is the
+  runtime's struct `Messaging_ExceptionHolder`, passed to the `_excep`
+  operations as an in struct.
 - C: local interfaces in `-bc` (rustorb/rustorb#187). A local interface has
   the stubs and the `POA_<Name>` structs of an interface; `POA_<Name>__init`
   makes a struct the implementation of local objects (it is not activated

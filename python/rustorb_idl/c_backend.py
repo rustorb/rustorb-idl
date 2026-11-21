@@ -31,8 +31,15 @@ reader, writer and freer walk, and ``TC_<Name>``, ``<Name>__alloc()`` and
 ``CORBA_sequence_<T>_allocbuf()`` use. The source holds the descriptors,
 the stubs and the skeletons.
 
-Valuetypes, abstract interfaces, ``int8`` and the IDL 4 bitmask and bitset
-have no C mapping and are errors (rustorb#187).
+``-Wbami`` adds the implied ``AMI_<I>Handler`` interfaces of callback AMI
+(rustorb's docs/ami.md) and, after each handler, the ``sendc_`` functions
+of its interface: ``Mod_I_sendc_<op>(obj, ami_handler, <in and inout
+values>, ev)``, over ``rustorb_c_sendc``. ``Messaging`` is the runtime's
+``<rustorb/messaging.h>``: ``Messaging::ExceptionHolder`` (a valuetype) is
+the struct ``Messaging_ExceptionHolder``, passed as an in struct.
+
+Other valuetypes, abstract interfaces, ``int8`` and the IDL 4 bitmask and
+bitset have no C mapping and are errors (rustorb#187).
 """
 
 import os
@@ -190,6 +197,8 @@ class CBackend(object):
     # -- checks ---------------------------------------------------------------
 
     def check_node(self, n, where):
+        if is_exception_holder(n):
+            return
         if fe.is_valuetype(n):
             raise fe.GeneratorError("valuetypes have no C mapping (rustorb#187)", where)
         if fe.is_native(n):
@@ -272,7 +281,7 @@ class CBackend(object):
             return self.is_var(r.content)
         if k == "named":
             n = self.full(r.node)
-            if fe.is_interface(n):
+            if fe.is_interface(n) or is_exception_holder(n):
                 return True
             if fe.is_struct(n) or fe.is_exception(n):
                 return any(self.is_var(fe.type_of(m.type, m)) for m in n.members)
@@ -573,6 +582,8 @@ class CBackend(object):
         h("#define %s" % guard)
         h()
         h("#include <rustorb/runtime.h>")
+        if fe.MESSAGING_IDL in self.spec.included_files():
+            h("#include <rustorb/messaging.h>")
         included = [f for f in self.spec.included_files() if f != fe.MESSAGING_IDL]
         for f in included:
             h('#include "%s.h"' % file_base(f))
@@ -1003,6 +1014,47 @@ class CBackend(object):
         c("void POA_%s__fini(PortableServer_Servant _servant, CORBA_Environment* _ev) {" % name)
         c("  rustorb_c_servant_fini(_servant, _ev);")
         c("}")
+        source = fe.ami_source(node)
+        if source is not None:
+            self.sendc_stubs(h, c, self.full(source))
+
+    # -Wbami
+
+    def sendc_stubs(self, h, c, node):
+        """The sendc_ functions of node (its operations and those of its
+        concrete bases, with the handler of the interface that declares
+        each), after the handler of node, which comes after the handlers of
+        its bases."""
+        h()
+        h("/* Callback AMI of %s. */" % self.cname(node))
+        seen = set()
+        for n in [node] + self.ancestors(node):
+            if getattr(n, "is_abstract", False) or fe.handler_of(n) is None:
+                continue
+            for sendc in cxx_backend.CxxBackend.sendc_operations(self, n):
+                if sendc[0] in seen:
+                    continue
+                seen.add(sendc[0])
+                self.sendc_stub(h, c, node, n, sendc)
+
+    def sendc_stub(self, h, c, node, owner, sendc):
+        name, reply, op, ins = sendc
+        d = op[6]
+        handler = self.full(fe.handler_of(owner))
+        sig = "void %s_%s(%s _obj, %s ami_handler%s, CORBA_Environment* _ev)" % (
+            self.cname(node), name, self.cname(node), self.cname(handler),
+            "".join(", %s %s" % (self.param_type(t, "in", d), c_ident(p)) for p, t in ins))
+        h("%s;" % sig)
+        c()
+        c("%s {" % sig)
+        if ins:
+            c("  void* _a[%d];" % len(ins))
+            for i, (p, t) in enumerate(ins):
+                c("  _a[%d] = %s;" % (i, self.arg_expr(t, "in", c_ident(p))))
+        hn = self.cname(handler)
+        c("  rustorb_c_sendc(_obj, &%s, %s, ami_handler, &%s__op_%s, &%s__op_%s_excep, _ev);" % (
+            self.op_desc_name(owner, op), "_a" if ins else "NULL", hn, reply, hn, reply))
+        c("}")
 
     def arg_expr(self, t, direction, pname):
         """The value pointer of a parameter for rustorb_c_invoke."""
@@ -1064,6 +1116,15 @@ class CBackend(object):
         else:
             c("  *(%s*)_r = %s;" % (self.return_type(ret, d), call))
         c("}")
+
+
+def is_exception_holder(n):
+    """Messaging::ExceptionHolder, the one valuetype of the C mapping
+    (the runtime's struct Messaging_ExceptionHolder)."""
+    return fe.is_valuetype(n) and getattr(n, "repository_id", None) == EXCEPTION_HOLDER_ID
+
+
+EXCEPTION_HOLDER_ID = "IDL:omg.org/Messaging/ExceptionHolder:1.0"
 
 
 def _c_char(b):
