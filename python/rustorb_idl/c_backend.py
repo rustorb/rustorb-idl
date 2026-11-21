@@ -15,6 +15,11 @@ C Language Mapping 1.0:
   and ``Mod_I__set_<attr>`` for attributes; the skeleton is ``POA_Mod_I``
   with ``POA_Mod_I__epv``, ``POA_Mod_I__vepv``, ``POA_Mod_I__init`` and
   ``POA_Mod_I__fini``;
+- a local interface ``Mod::L`` has the same stubs and ``POA_Mod_L`` structs,
+  without activation: ``POA_Mod_L__init`` makes a struct the
+  implementation of local objects, which ``Mod_L__create(impl, ev)`` makes
+  and whose stubs call it directly (``CORBA_tk_local_interface``; sending
+  one is ``MARSHAL`` minor 4);
 - parameters are passed as tables 1-2 and 1-3 of the mapping say: the
   variable-length out values and results are allocated by the callee and
   freed with ``CORBA_free``.
@@ -26,8 +31,20 @@ reader, writer and freer walk, and ``TC_<Name>``, ``<Name>__alloc()`` and
 ``CORBA_sequence_<T>_allocbuf()`` use. The source holds the descriptors,
 the stubs and the skeletons.
 
-Valuetypes, abstract and local interfaces, ``int8`` and the IDL 4
-bitmask and bitset have no C mapping and are errors (rustorb#187).
+``-Wbami`` adds the implied ``AMI_<I>Handler`` interfaces of callback AMI
+(rustorb's docs/ami.md) and, after each handler, the ``sendc_`` functions
+of its interface: ``Mod_I_sendc_<op>(obj, ami_handler, <in and inout
+values>, ev)``, over ``rustorb_c_sendc``. ``Messaging`` is the runtime's
+``<rustorb/messaging.h>``: ``Messaging::ExceptionHolder`` (a valuetype) is
+the struct ``Messaging_ExceptionHolder``, passed as an in struct.
+
+IDL 4 (rustorb#187): ``int8`` is ``CORBA_int8``, sent and typed as an
+octet. A bitmask or a bitset is the unsigned integer that holds its bits
+(as it is sent, and its TypeCode): a bitmask's values are constants, a
+bitset's fields macros ``<Name>_<field>(v)`` and ``<Name>_set_<field>(p,
+x)``. ``@default`` and ``@range`` are ignored.
+
+Other valuetypes and abstract interfaces have no C mapping and are errors.
 """
 
 import os
@@ -72,6 +89,8 @@ BASIC = {
     "float": "CORBA_float",
     "double": "CORBA_double",
     "longdouble": "CORBA_long_double",
+    # IDL 4 int8: sent and typed as an octet (as in the C++ mapping).
+    "int8": "CORBA_int8",
 }
 
 # The names of element types in CORBA_sequence_<name> (1.11).
@@ -89,6 +108,7 @@ SEQ_NAMES = {
     "float": "float",
     "double": "double",
     "longdouble": "long_double",
+    "int8": "int8",
     "string": "string",
     "wstring": "wstring",
     "any": "any",
@@ -185,6 +205,8 @@ class CBackend(object):
     # -- checks ---------------------------------------------------------------
 
     def check_node(self, n, where):
+        if is_exception_holder(n):
+            return
         if fe.is_valuetype(n):
             raise fe.GeneratorError("valuetypes have no C mapping (rustorb#187)", where)
         if fe.is_native(n):
@@ -193,10 +215,6 @@ class CBackend(object):
             if getattr(n, "is_abstract", False):
                 raise fe.GeneratorError(
                     "abstract interfaces have no C mapping (rustorb#187)", where
-                )
-            if getattr(n, "is_local", False):
-                raise fe.GeneratorError(
-                    "local interfaces are not supported by the C backend yet (rustorb#187)", where
                 )
 
     # -- types ------------------------------------------------------------------
@@ -228,8 +246,10 @@ class CBackend(object):
             n = self.full(t.node)
             self.check_node(n, where)
             return self.cname(n)
-        if k in ("int8", "bitmask", "bitset", "Principal"):
-            raise fe.GeneratorError("%s has no C mapping (rustorb#187)" % k, where)
+        if k in ("bitmask", "bitset"):
+            return self.cname(t.node)
+        if k == "Principal":
+            raise fe.GeneratorError("Principal has no C mapping", where)
         raise fe.GeneratorError("no C type for %r" % t, where)
 
     def seq_elem_name(self, t, where):
@@ -271,7 +291,7 @@ class CBackend(object):
             return self.is_var(r.content)
         if k == "named":
             n = self.full(r.node)
-            if fe.is_interface(n):
+            if fe.is_interface(n) or is_exception_holder(n):
                 return True
             if fe.is_struct(n) or fe.is_exception(n):
                 return any(self.is_var(fe.type_of(m.type, m)) for m in n.members)
@@ -285,7 +305,7 @@ class CBackend(object):
         any, array, vararray."""
         r = t.resolved()
         k = r.kind
-        if k in BASIC:
+        if k in BASIC or k in ("bitmask", "bitset"):
             return "basic"
         if k in ("Object", "TypeCode"):
             return "objref"
@@ -399,6 +419,8 @@ class CBackend(object):
                 "CORBA_tk_fixed, sizeof(CORBA_fixed_%d_%d), NULL, NULL, NULL, 0, 0, NULL, NULL, "
                 "-1, %d, %d" % (t.digits, t.scale, t.digits, t.scale),
             )
+        if k in ("bitmask", "bitset"):
+            return "&%s__desc" % self.cname(t.node)
         if k == "named":
             n = self.full(t.node)
             self.check_node(n, where)
@@ -572,6 +594,8 @@ class CBackend(object):
         h("#define %s" % guard)
         h()
         h("#include <rustorb/runtime.h>")
+        if fe.MESSAGING_IDL in self.spec.included_files():
+            h("#include <rustorb/messaging.h>")
         included = [f for f in self.spec.included_files() if f != fe.MESSAGING_IDL]
         for f in included:
             h('#include "%s.h"' % file_base(f))
@@ -646,10 +670,10 @@ class CBackend(object):
             pass
         elif fe.is_valuetype(node):
             raise fe.GeneratorError("valuetypes have no C mapping (rustorb#187)", node)
-        elif fe.is_bitmask(node) or fe.is_bitset(node):
-            raise fe.GeneratorError(
-                "the IDL 4 %s has no C mapping (rustorb#187)" % fe.kind_name(node), node
-            )
+        elif fe.is_bitmask(node):
+            self.bitmask(h, node)
+        elif fe.is_bitset(node):
+            self.bitset(h, node)
         else:
             raise fe.GeneratorError(
                 "%s definitions are not supported by the C backend" % fe.kind_name(node), node
@@ -694,6 +718,60 @@ class CBackend(object):
             "NULL, _rustorb_e_%s, -1, 0, 0, &_rustorb_c_%s};"
             % (name, name, fe.repository_id(node), node.name, len(values), name, name)
         )
+
+    # IDL 4 bitmasks and bitsets. The C mapping has none; as in the C++
+    # mapping they are sent as the unsigned integer that holds their bits,
+    # whose TypeCode is theirs too. In C the type is that integer: C
+    # bit-fields have no portable layout, so a bitset's fields are read and
+    # written with macros on the value as it is sent.
+
+    def holder(self, node):
+        bits = node.bit_bound if fe.is_bitmask(node) else max(node.bit_size, 1)
+        return cxx_backend.holder_type(bits).replace("uint8_t", "octet").replace(
+            "uint16_t", "ushort").replace("uint32_t", "ulong").replace("uint64_t", "ulonglong")
+
+    def holder_alias(self, h, node):
+        name = self.cname(node)
+        u = self.holder(node)
+        h()
+        h("typedef %s %s;" % (BASIC[u], name))
+        h("#define %s__desc %s__desc" % (name, BASIC[u]))
+        h("#define TC_%s TC_%s" % (name, u))
+        return name, u
+
+    def bitmask(self, h, node):
+        name, u = self.holder_alias(h, node)
+        suffix = "ULL" if u == "ulonglong" else "U"
+        for v in node.values:
+            h("#define %s ((%s)(1%s << %d))" % (
+                self.enumerator(node, v.name), name, suffix, v.position))
+
+    def bitset(self, h, node):
+        if node.base is not None:
+            raise fe.GeneratorError("bitset inheritance is not supported", node)
+        name, u = self.holder_alias(h, node)
+        for f in node.bitfields:
+            if not f.name:
+                continue
+            kind = fe.BASIC.get(" ".join(str(f.type).split()))
+            if kind not in INT_RANGES and kind != "boolean":
+                raise fe.GeneratorError("a bitfield of %s is not supported" % f.type, node)
+            ft = BASIC[kind]
+            mask = "0x%XULL" % ((1 << f.bits) - 1)
+            field = "(((CORBA_unsigned_long_long)(v) >> %d) & %s)" % (f.position, mask)
+            if kind == "boolean":
+                get = "((CORBA_boolean)(%s != 0))" % field
+            elif kind in ("short", "long", "longlong", "int8"):
+                # A signed bitfield: sign-extend its top bit.
+                top = "0x%XULL" % (1 << (f.bits - 1))
+                get = "((%s)(CORBA_long_long)((%s ^ %s) - %s))" % (ft, field, top, top)
+            else:
+                get = "((%s)%s)" % (ft, field)
+            h("/* %s: %d bit%s from bit %d. */" % (f.name, f.bits, "" if f.bits == 1 else "s", f.position))
+            h("#define %s_%s(v) %s" % (name, f.name, get))
+            h("#define %s_set_%s(p, x) (*(p) = (%s)((*(p) & ~(%s << %d)) | "
+              "(((CORBA_unsigned_long_long)(x) & %s) << %d)))" % (
+                  name, f.name, name, mask, f.position, mask, f.position))
 
     # typedefs
 
@@ -850,6 +928,11 @@ class CBackend(object):
 
     def interface_type(self, h, node):
         name = self.cname(node)
+        if getattr(node, "is_local", False):
+            h()
+            h("/* local interface %s: implemented by a POA_%s struct (POA_%s__init, no" % (
+                node.name, name, name))
+            h("   activation), whose local objects %s__create makes. */" % name)
         h()
         h("#ifndef _%s_defined" % name)
         h("#define _%s_defined" % name)
@@ -892,11 +975,13 @@ class CBackend(object):
                 self.declare_type(h, op[2], op[6])
         self.named.append(name)
         c()
+        local = getattr(node, "is_local", False)
         c("static rustorb_c_cache _rustorb_c_%s;" % name)
         c(
-            'const rustorb_c_type %s__desc = {CORBA_tk_objref, sizeof(CORBA_Object), "%s", "%s", '
+            'const rustorb_c_type %s__desc = {%s, sizeof(CORBA_Object), "%s", "%s", '
             "NULL, 0, 0, NULL, NULL, -1, 0, 0, &_rustorb_c_%s};"
-            % (name, fe.repository_id(node), node.name, name)
+            % (name, "CORBA_tk_local_interface" if local else "CORBA_tk_objref",
+               fe.repository_id(node), node.name, name)
         )
         # Operation descriptors.
         for op in ops:
@@ -964,6 +1049,10 @@ class CBackend(object):
         h()
         h("void POA_%s__init(PortableServer_Servant _servant, CORBA_Environment* _ev);" % name)
         h("void POA_%s__fini(PortableServer_Servant _servant, CORBA_Environment* _ev);" % name)
+        if local:
+            h("/* A local object calling impl (initialised with POA_%s__init; it must" % name)
+            h("   outlive the object's references). */")
+            h("%s %s__create(PortableServer_Servant impl, CORBA_Environment* _ev);" % (name, name))
         c()
         for owner, op in owners:
             self.skel(c, node, owner, op)
@@ -981,10 +1070,56 @@ class CBackend(object):
                self.module)
         )
         c("void POA_%s__init(PortableServer_Servant _servant, CORBA_Environment* _ev) {" % name)
-        c("  rustorb_c_servant_init(_servant, &_rustorb_cls_%s, _ev);" % name)
+        c("  rustorb_c_%s_init(_servant, &_rustorb_cls_%s, _ev);" % (
+            "local" if local else "servant", name))
         c("}")
+        if local:
+            c("%s %s__create(PortableServer_Servant impl, CORBA_Environment* _ev) {" % (name, name))
+            c("  return rustorb_c_local_object(impl, _ev);")
+            c("}")
         c("void POA_%s__fini(PortableServer_Servant _servant, CORBA_Environment* _ev) {" % name)
         c("  rustorb_c_servant_fini(_servant, _ev);")
+        c("}")
+        source = fe.ami_source(node)
+        if source is not None:
+            self.sendc_stubs(h, c, self.full(source))
+
+    # -Wbami
+
+    def sendc_stubs(self, h, c, node):
+        """The sendc_ functions of node (its operations and those of its
+        concrete bases, with the handler of the interface that declares
+        each), after the handler of node, which comes after the handlers of
+        its bases."""
+        h()
+        h("/* Callback AMI of %s. */" % self.cname(node))
+        seen = set()
+        for n in [node] + self.ancestors(node):
+            if getattr(n, "is_abstract", False) or fe.handler_of(n) is None:
+                continue
+            for sendc in cxx_backend.CxxBackend.sendc_operations(self, n):
+                if sendc[0] in seen:
+                    continue
+                seen.add(sendc[0])
+                self.sendc_stub(h, c, node, n, sendc)
+
+    def sendc_stub(self, h, c, node, owner, sendc):
+        name, reply, op, ins = sendc
+        d = op[6]
+        handler = self.full(fe.handler_of(owner))
+        sig = "void %s_%s(%s _obj, %s ami_handler%s, CORBA_Environment* _ev)" % (
+            self.cname(node), name, self.cname(node), self.cname(handler),
+            "".join(", %s %s" % (self.param_type(t, "in", d), c_ident(p)) for p, t in ins))
+        h("%s;" % sig)
+        c()
+        c("%s {" % sig)
+        if ins:
+            c("  void* _a[%d];" % len(ins))
+            for i, (p, t) in enumerate(ins):
+                c("  _a[%d] = %s;" % (i, self.arg_expr(t, "in", c_ident(p))))
+        hn = self.cname(handler)
+        c("  rustorb_c_sendc(_obj, &%s, %s, ami_handler, &%s__op_%s, &%s__op_%s_excep, _ev);" % (
+            self.op_desc_name(owner, op), "_a" if ins else "NULL", hn, reply, hn, reply))
         c("}")
 
     def arg_expr(self, t, direction, pname):
@@ -1047,6 +1182,15 @@ class CBackend(object):
         else:
             c("  *(%s*)_r = %s;" % (self.return_type(ret, d), call))
         c("}")
+
+
+def is_exception_holder(n):
+    """Messaging::ExceptionHolder, the one valuetype of the C mapping
+    (the runtime's struct Messaging_ExceptionHolder)."""
+    return fe.is_valuetype(n) and getattr(n, "repository_id", None) == EXCEPTION_HOLDER_ID
+
+
+EXCEPTION_HOLDER_ID = "IDL:omg.org/Messaging/ExceptionHolder:1.0"
 
 
 def _c_char(b):

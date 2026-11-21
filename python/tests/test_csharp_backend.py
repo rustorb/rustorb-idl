@@ -34,7 +34,12 @@ IDLS = [
     os.path.join(INTEROP_IDL, "InteropTest.idl"),
     os.path.join(INTEROP_IDL, "AnyTest.idl"),
     os.path.join(INTEROP_IDL, "PoaProbe.idl"),
+    os.path.join(INTEROP_IDL, "ValueTest.idl"),
+    os.path.join(INTEROP_IDL, "CustomTest.idl"),
+    os.path.join(INTEROP_IDL, "AbstractTest.idl"),
     os.path.join(CPP_IDL, "CxxMapping.idl"),
+    os.path.join(CPP_IDL, "Idl4.idl"),
+    os.path.join(TEST_IDL, "LocalTest.idl"),
     os.path.join(TEST_IDL, "CosNaming.idl"),
 ]
 
@@ -143,23 +148,117 @@ class CSharpBackendTest(unittest.TestCase):
 
     def test_options(self):
         path = os.path.join(INTEROP_IDL, "InteropTest.idl")
-        self.assertEqual(cli.main(["-bcsharp", "-Wbami", "-C", OUT, path]), 2)
         self.assertEqual(cli.main(["-bcsharp", "-Wbh=.h", "-C", OUT, path]), 2)
         self.assertEqual(cli.main(["-bcs", "-C", os.path.join(OUT, "cs"), path]), 0)
 
+    def test_valuetypes(self):
+        v = self.cs("ValueTest")
+        # 7.6: an abstract class with properties (private members
+        # protected), operations and factories abstract.
+        self.assertIn("public abstract class Point : global::Corba.ValueBase", v)
+        self.assertIn("public abstract class Point3 : global::ValueTest.Point", v)
+        self.assertIn('private static readonly string[] __ids = { "IDL:ValueTest/Point3:1.0", '
+                      '"IDL:ValueTest/Point:1.0" };', v)
+        self.assertIn('protected string label { get; set; } = "";', v)
+        self.assertIn("public abstract int doubled();", v)
+        self.assertIn("[global::Omg.Types.Factory]\n        public abstract void init(int balance);", v)
+        # A supported interface: its operations; the tie.
+        self.assertIn("public abstract class Tally : global::Corba.ValueBase, "
+                      "global::ValueTest.ICounterOperations", v)
+        self.assertIn("public class CounterPOATie : CounterPOA", v)
+        # The OBV_ class and the default factory of a valuetype without
+        # operations, none for one with.
+        self.assertIn("namespace OBV_ValueTest", v)
+        self.assertIn("public Point3(int x, int y, int z, string label)", v)
+        self.assertIn('global::Rustorb.Values.Default("IDL:ValueTest/Point:1.0", '
+                      "() => new global::OBV_ValueTest.Point());", v)
+        self.assertNotIn('Values.Default("IDL:ValueTest/Account:1.0"', v)
+        self.assertIn("[global::System.Runtime.CompilerServices.ModuleInitializer]", v)
+        # Value boxes.
+        self.assertIn("public class LongBox : global::Corba.ValueBase", v)
+        self.assertIn("public int value { get; set; }", v)
+        self.assertIn("global::Rustorb.TypeCodes.ValueBox(__id, \"LongBox\"", v)
+        c = self.cs("CustomTest")
+        self.assertIn("public abstract class Blob : global::Corba.ValueBase, global::Corba.ICustomMarshal", c)
+        self.assertIn("public abstract void marshal(global::Corba.DataOutputStream os);", c)
+        a = self.cs("AbstractTest")
+        # An abstract interface: the interface, the stub, read and written
+        # as a reference or a value.
+        self.assertIn("public interface INamed\n", a)
+        self.assertIn("public class Named : global::Corba.Object, INamed", a)
+        self.assertIn("public interface IPersonOperations : global::AbstractTest.INamed", a)
+        self.assertIn("public abstract class Card : global::Corba.ValueBase, global::AbstractTest.INamed", a)
+        self.assertIn("__out.write_abstract(__v);", a)
+        self.assertIn("tk_abstract_interface", a)
+
+    def test_ami(self):
+        out = os.path.join(OUT, "ami")
+        path = os.path.join(INTEROP_IDL, "InteropTest.idl")
+        self.assertEqual(cli.main(["-bcsharp", "-Wbami", "-C", out, path]), 0)
+        echo = self.cs("InteropTest", out)
+        # The implied handler interface, on Messaging.ReplyHandler.
+        self.assertIn("public interface IAMI_EchoHandlerOperations : global::Messaging.IReplyHandlerOperations", echo)
+        self.assertIn("void divide_excep(global::Messaging.ExceptionHolder? excep_holder);", echo)
+        # sendc_ on the stub class only.
+        self.assertIn("public void sendc_divide(global::InteropTest.IAMI_EchoHandler? ami_handler, int a, int b)", echo)
+        self.assertIn('global::Rustorb.Ami.Sendc(this, "divide", ami_handler,', echo)
+        self.assertIn("public void sendc_get_counter(global::InteropTest.IAMI_EchoHandler? ami_handler)", echo)
+        self.assertNotIn("void sendc_divide(global::InteropTest.IAMI_EchoHandler? ami_handler, int a, int b);", echo)
+        # Every user exception is known to the runtime.
+        self.assertIn('global::Rustorb.UserExceptions.Register<global::InteropTest.Oops>("IDL:rustorb.org/InteropTest/Oops:1.0"', echo)
+        if DOTNET:
+            proj = os.path.join(out, "Compile.csproj")
+            with open(proj, "w") as f:
+                f.write(textwrap.dedent("""\
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup>
+                        <TargetFramework>net8.0</TargetFramework>
+                        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+                      </PropertyGroup>
+                      <ItemGroup>
+                        <ProjectReference Include="%s" />
+                      </ItemGroup>
+                    </Project>
+                    """) % RUNTIME)
+            r = subprocess.run([DOTNET, "build", proj], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout[-4000:] + r.stderr[-2000:])
+
+    def test_local_interfaces(self):
+        m = self.cs("LocalTest")
+        # An abstract class on LocalObject to derive from, no stub, skeleton or tie.
+        self.assertIn("public abstract class Loud : global::Corba.LocalObject, ILoud", m)
+        # With the operations of the bases.
+        self.assertIn("public abstract void shout();", m)
+        self.assertIn("public abstract string greet(string who);", m)
+        self.assertIn("public abstract int count { get; set; }", m)
+        self.assertNotIn("GreeterPOA", m)
+        self.assertIn("tk_local_interface", m)
+        self.assertIn('throw new global::Corba.MARSHAL("a local object cannot be sent", 4', m)
+
+    def test_bitmask_and_bitset(self):
+        m = self.cs("Idl4")
+        self.assertIn("[global::System.Flags]\n    public enum Flags : byte", m)
+        self.assertIn("WRITE = (byte)1 << 3,", m)
+        self.assertIn("public enum Wide : ulong", m)
+        self.assertIn("HIGH = (ulong)1 << 39,", m)
+        self.assertIn("public struct Header : global::System.IEquatable<Header>", m)
+        self.assertIn("public short delta { get; set; }", m)
+        # Sent as the unsigned integer that holds the bits, with its TypeCode.
+        self.assertIn("__out.write_ushort(__x);", m)
+        self.assertIn("__r.delta = (short)((long)(((__x >> 3) & 0x1FUL) << 59) >> 59);", m)
+        self.assertIn("TCKind.tk_ulonglong", m)
+        # int8 has the TypeCode of octet, as in the C++ mapping.
+        self.assertIn("public sbyte offset { get; set; }", m)
+        # @default sets the initial value; @range is checked when sent and read.
+        self.assertIn("            retries = 7;\n            enabled = true;\n            ratio = 2.5d;\n", m)
+        self.assertIn("if (__v.level < (short)0 || __v.level > (short)10)", m)
+        self.assertIn("if (__m_step < (short)1 || __m_step > (short)5) __in.fail();", m)
+
     def test_unsupported(self):
-        # rustorb#186: valuetypes, abstract and local interfaces; and the
-        # IDL 4 bitmask and bitset.
-        cases = {
-            "valuetype": "module U { valuetype V { public long x; }; };",
-            "abstract": "module U { abstract interface A { void a(); }; };",
-            "local": "module U { local interface L { void a(); }; };",
-            "bitmask": "module U { bitmask B { X, Y }; };",
-        }
-        for name, text in cases.items():
-            with self.subTest(name):
-                path = write_idl("Unsupported_%s.idl" % name, text)
-                self.assertEqual(cli.main(["-bcsharp", "-C", OUT, path]), 1)
+        path = write_idl("Unsupported_bitset.idl", """\
+            module U { bitset A { bitfield<2> a; }; bitset B : A { bitfield<3> b; }; };
+            """)
+        self.assertEqual(cli.main(["-bcsharp", "-C", OUT, path]), 1)
 
     @unittest.skipUnless(DOTNET, "needs RUSTORB_SRC and dotnet")
     def test_compile(self):

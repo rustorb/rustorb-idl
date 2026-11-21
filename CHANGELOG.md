@@ -8,6 +8,85 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ### Added
 
+- C: IDL 4 `int8`, bitmask and bitset in `-bc` (rustorb/rustorb#187).
+  `int8` is the runtime's `CORBA_int8`, sent and typed as an octet. A
+  bitmask or a bitset is a typedef of the unsigned integer that holds its
+  bits, whose descriptor and TypeCode it uses (as the C++ mapping sends
+  them): the bitmask's values are constants `<Scope>_<VALUE>`, the
+  bitset's fields macros `<Name>_<field>(v)` and `<Name>_set_<field>(p,
+  x)` (signed fields are sign-extended). Bitset inheritance is an error;
+  `@default` and `@range` are ignored.
+- C: `-bc -Wbami`, callback AMI (rustorb/rustorb#187). The implied
+  `AMI_<I>Handler` interfaces are generated as interfaces on
+  `Messaging_ReplyHandler` (from rustorb's `<rustorb/messaging.h>`), and
+  after each handler come the `sendc_` functions of its interface,
+  `<I>_sendc_<op>(obj, ami_handler, <in and inout values>, ev)`, over the
+  runtime's `rustorb_c_sendc`. `Messaging::ExceptionHolder` is the
+  runtime's struct `Messaging_ExceptionHolder`, passed to the `_excep`
+  operations as an in struct.
+- C: local interfaces in `-bc` (rustorb/rustorb#187). A local interface has
+  the stubs and the `POA_<Name>` structs of an interface; `POA_<Name>__init`
+  makes a struct the implementation of local objects (it is not activated
+  in a POA), `<Name>__create(impl, ev)` makes one, and its stubs call the
+  implementation directly. Its TypeCode is `tk_local_interface`; sending
+  one is `MARSHAL` (minor 4).
+- C#: local interfaces and the IDL 4 bitmask, bitset, `@default` and
+  `@range` / `@min` / `@max` in `-bcsharp` (rustorb/rustorb#186). A local
+  interface is `I<Name>` and an abstract class `<Name>` on
+  `Corba.LocalObject` with every operation and attribute abstract, to
+  derive implementations from; its helper's `write` and `read` raise
+  `MARSHAL` (minor 4). A bitmask is a `[Flags]` enum on the unsigned type
+  of its `@bit_bound`, a bitset a struct of bitfield properties; both are
+  sent, as in the C++ mapping, as the unsigned integer that holds their
+  bits, with its TypeCode. `@default` sets a member's initial value;
+  `@range` is checked when a struct is sent (`BAD_PARAM`) and read.
+  `int8` now has the TypeCode of octet, as in the C++ mapping, instead of
+  being an error where a TypeCode is needed. Test IDL:
+  `tests/idl/LocalTest.idl`.
+
+- C#: `-bcsharp -Wbami`, callback AMI (rustorb/rustorb#186): the
+  `sendc_` operations on the stub class (not on `I<Name>`, which other
+  classes may implement), over `Rustorb.Ami.Sendc`, with the implied
+  `AMI_<Name>Handler` interfaces on the runtime's `Messaging`. Every user
+  exception is registered with the runtime (`Rustorb.UserExceptions`),
+  which raises those of `Messaging.ExceptionHolder`.
+
+- C#: valuetypes, value boxes, custom valuetypes and abstract interfaces
+  in `-bcsharp` (rustorb/rustorb#186). A valuetype is the abstract class
+  of IDL4 to C# 7.6 (state members as properties, private ones protected;
+  operations, those of supported interfaces and `[Omg.Types.Factory]`
+  initializers abstract) on its concrete base or `Corba.ValueBase`, with
+  its `_truncatable_ids`, `_write` and `_read`; one without operations
+  also gets `OBV_<Module>.<Name>`, a concrete class with a constructor of
+  every state member, which its default factory makes. An abstract
+  valuetype is the interface `I<Name>`; a value box a class with the
+  property `value`; a custom valuetype implements `Corba.ICustomMarshal`.
+  An abstract interface is `I<Name>` and a stub class, read and written as
+  a reference or a value. A module initializer registers the default
+  factories and the TypeCodes of the valuetypes. Every interface also gets
+  the tie `<Name>POATie`.
+
+- Ruby: `-bruby` (also `-brb`) writes the OMG Ruby Language Mapping (RCLM
+  1.2, formal/2013-04-05) for rustorb's Ruby binding (the `rustorb` gem,
+  rustorb/rustorb#183, #184): `<File>C.rb` with the types (structs, unions
+  and exceptions as classes on `CORBA::Portable::Struct`,
+  `CORBA::Portable::Union` and `CORBA::UserException`, enums as modules of
+  Integer constants, typedefs, constants, `_tc` on each, made when first
+  used so that recursive types need nothing more) and the stubs (a module
+  per interface with `_narrow`, a method per operation and `x` / `x=` per
+  attribute, out and inout values returned after the result), and
+  `<File>S.rb` with the skeletons (`POA::<Module>::<I>`). Names that must
+  be Ruby constants start with a capital; keywords and the methods every
+  object has get an `r_` prefix. IDL 4: `int8` (an Integer sent as an
+  octet), bitmasks (modules of `1 << position` constants), bitsets
+  (`Rustorb::Bitset` classes sent as their holder integer), `@default`
+  (`DEFAULTS`) and `@range` / `@min` / `@max` (`RANGES`, checked when a
+  struct is sent or received). A local interface is a module (with its
+  `_tc`, a tk_local_interface, and nested definitions) that
+  implementations on `CORBA::LocalObject` include, with no stub or
+  skeleton. Valuetypes, abstract interfaces and `-Wbami` are errors for
+  now (rustorb/rustorb#188).
+
 - C: `-bc` writes the OMG C Language Mapping 1.0 (formal/99-07-35) for
   rustorb's C binding (librustorb_c, rustorb/rustorb#180, #181): a
   `<File>.h` and a `<File>.c` per IDL file with the types (structs, unions
@@ -30,8 +109,8 @@ rustorb/rustorb; see its CHANGELOG.md for them.
   all-values constructors), enums, constants in `Constants` and Helpers
   with the TypeCode, Any insertion and extraction, and the marshalling.
   `-Wbdotnet_naming` uses the .NET naming scheme (PascalCase, 7.1.1.2).
-  Valuetypes, abstract and local interfaces, bitmasks, bitsets and
-  `-Wbami` are errors for now (rustorb/rustorb#186, rustorb/rustorb#178).
+  Local interfaces, bitmasks, bitsets and `-Wbami` are errors for now
+  (rustorb/rustorb#186, rustorb/rustorb#178).
 
 - Rust: with `-Wbdds_only -Wbxtypes`, the interfaces marked `@DDSService`
   get the function-call style of DDS-RPC 1.0 for rustorb-dds: the implied
