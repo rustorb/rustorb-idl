@@ -28,7 +28,9 @@ recursive types need nothing from the generated code. IDL 4 (rustorb):
 unsigned integer that holds its bits; ``@default`` gives the value of a
 struct member that ``new`` does not get and ``@range`` / ``@min`` /
 ``@max`` are checked when a struct is sent or received. Valuetypes and
-abstract and local interfaces are errors (rustorb#188).
+abstract interfaces are errors (rustorb#188). A local interface is a
+module that implementations include, with ``CORBA::LocalObject`` as their
+base.
 """
 
 import math
@@ -195,10 +197,6 @@ class RubyBackend(object):
             if getattr(n, "is_abstract", False):
                 raise fe.GeneratorError(
                     "abstract interfaces are not supported by the Ruby backend yet (rustorb#188)", where
-                )
-            if getattr(n, "is_local", False):
-                raise fe.GeneratorError(
-                    "local interfaces are not supported by the Ruby backend yet (rustorb#188)", where
                 )
 
     # -- TypeCodes ------------------------------------------------------------
@@ -640,8 +638,37 @@ class RubyBackend(object):
             args.append("oneway: true")
         return "::Rustorb::Operation.new(%s)" % ", ".join(args)
 
+    def local_interface(self, node):
+        """A module the implementations include (with CORBA::LocalObject as
+        their base): no stub, no skeleton."""
+        w = self.w
+        w("module %s" % const_name(node.name))
+        w.indent()
+        w('ID = "%s"' % fe.repository_id(node))
+        w("extend ::Rustorb::LocalInterfaceModule")
+        for b in self.bases(node):
+            self.check_node(b, node)
+            w("include %s" % self.path(b))
+        w()
+        w("def self._tc")
+        w.indent()
+        w('@_tc ||= ::CORBA::TypeCode.create_local_interface_tc(ID, "%s")' % node.name)
+        w.dedent()
+        w("end")
+        inner = [d for d in fe.members_of(node) if not (fe.is_operation(d) or fe.is_attribute(d))]
+        if inner:
+            w()
+            self.nested(node)
+            if w.lines[-1] == "":
+                w.lines.pop()
+        w.dedent()
+        w("end")
+        w()
+
     def interface(self, node):
         w = self.w
+        if getattr(node, "is_local", False):
+            return self.local_interface(node)
         name = const_name(node.name)
         path = self.path(node)
         ops = self.operations(node)

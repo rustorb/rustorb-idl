@@ -33,8 +33,9 @@ IDLS = [
     os.path.join(CPP_IDL, "CxxMapping.idl"),
     os.path.join(CPP_IDL, "Idl4.idl"),
     os.path.join(TEST_IDL, "CosNaming.idl"),
+    os.path.join(TEST_IDL, "LocalTest.idl"),
 ]
-NAMES = ("InteropTest", "AnyTest", "PoaProbe", "CxxMapping", "Idl4", "CosNaming")
+NAMES = ("InteropTest", "AnyTest", "PoaProbe", "CxxMapping", "Idl4", "CosNaming", "LocalTest")
 
 
 def tearDownModule():
@@ -176,6 +177,22 @@ class RubyBackendTest(unittest.TestCase):
         self.assertIn('RANGES = { "level" => [0, 10].freeze, "step" => [1, 5].freeze }.freeze', s)
         self.assertIn('["offset", ::CORBA._tc_int8]', s)
 
+    def test_local_interfaces(self):
+        s, sk = self.stubs("LocalTest"), self.skels("LocalTest")
+        # A module for the implementations, with the nested definitions; no
+        # stub and no skeleton.
+        self.assertIn("  module Greeter\n    ID = \"IDL:LocalTest/Greeter:1.0\"\n"
+                      "    extend ::Rustorb::LocalInterfaceModule\n", s)
+        self.assertIn('::CORBA::TypeCode.create_local_interface_tc(ID, "Greeter")', s)
+        self.assertIn("    N = 3\n", s)
+        self.assertIn("    class Msg < ::CORBA::Portable::Struct", s)
+        self.assertIn("  module Loud\n    ID = \"IDL:LocalTest/Loud:1.0\"\n"
+                      "    extend ::Rustorb::LocalInterfaceModule\n    include ::LocalTest::Greeter\n", s)
+        self.assertIn("    include ::LocalTest::Remote\n", s)
+        self.assertEqual(s.count("::Rustorb.stub_class(self)"), 1)
+        self.assertIn("class Remote < ::PortableServer::Servant", sk)
+        self.assertNotIn("class Greeter", sk)
+
     def test_lower_case_names(self):
         path = write_idl("lower.idl", """\
             module lower {
@@ -231,7 +248,6 @@ class RubyBackendTest(unittest.TestCase):
     def test_unsupported(self):
         self.unsupported("valuetype V { public long x; };\n", "valuetypes are not supported by the Ruby backend")
         self.unsupported("abstract interface A { void f(); };\n", "abstract interfaces are not supported")
-        self.unsupported("local interface L { void f(); };\n", "local interfaces are not supported")
         self.unsupported("bitset B { bitfield<2> a; };\nbitset C : B { bitfield<2> b; };\n",
                          "bitset inheritance is not supported")
         self.unsupported("interface I { void f(); };\n", "-Wbami is not for ruby", ["-Wbami"])

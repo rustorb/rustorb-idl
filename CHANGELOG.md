@@ -81,8 +81,11 @@ rustorb/rustorb; see its CHANGELOG.md for them.
   octet), bitmasks (modules of `1 << position` constants), bitsets
   (`Rustorb::Bitset` classes sent as their holder integer), `@default`
   (`DEFAULTS`) and `@range` / `@min` / `@max` (`RANGES`, checked when a
-  struct is sent or received). Valuetypes, abstract and local interfaces
-  and `-Wbami` are errors for now (rustorb/rustorb#188).
+  struct is sent or received). A local interface is a module (with its
+  `_tc`, a tk_local_interface, and nested definitions) that
+  implementations on `CORBA::LocalObject` include, with no stub or
+  skeleton. Valuetypes, abstract interfaces and `-Wbami` are errors for
+  now (rustorb/rustorb#188).
 
 - C: `-bc` writes the OMG C Language Mapping 1.0 (formal/99-07-35) for
   rustorb's C binding (librustorb_c, rustorb/rustorb#180, #181): a
