@@ -223,6 +223,29 @@ class RubyBackendTest(unittest.TestCase):
         self.assertIn("    include ::CORBA::CustomMarshal\n", c)
         self.assertIn("::CORBA::VM_CUSTOM", c)
 
+    def test_ami(self):
+        # -Wbami: the handlers as interfaces on Messaging::ReplyHandler (in
+        # the runtime), sendc_ methods in the stubs.
+        outdir = os.path.join(OUT, "ami")
+        path = os.path.join(INTEROP_IDL, "InteropTest.idl")
+        self.assertEqual(cli.main(["-bruby", "-Wbami", "-C", outdir, path]), 0)
+        s = read(os.path.join(outdir, "InteropTestC.rb"))
+        sk = read(os.path.join(outdir, "InteropTestS.rb"))
+        self.assertIn("  module AMI_EchoHandler\n", s)
+        self.assertIn("    include ::Messaging::ReplyHandler\n", s)
+        self.assertIn('"divide_excep" => ::Rustorb::Operation.new("divide_excep", params: '
+                      '[[:in, ::Messaging::ExceptionHolder._tc]])', s)
+        self.assertIn('def sendc_divide(ami_handler, a, b) = _sendc(::InteropTest::Echo._ops["divide"], '
+                      ':divide, :divide_excep, ami_handler, [a, b])', s)
+        self.assertIn('def sendc_set_counter(ami_handler, attr_counter) = _sendc(::InteropTest::Echo._ops['
+                      '"_set_counter"], :set_counter, :set_counter_excep, ami_handler, [attr_counter])', s)
+        self.assertNotIn("module Messaging", s)
+        self.assertIn("class AMI_EchoHandler < ::PortableServer::Servant", sk)
+        if RUBY:
+            for f in ("InteropTestC.rb", "InteropTestS.rb"):
+                r = subprocess.run([RUBY, "-wc", os.path.join(outdir, f)], capture_output=True, text=True)
+                self.assertEqual(r.returncode, 0, r.stderr)
+
     def test_lower_case_names(self):
         path = write_idl("lower.idl", """\
             module lower {
@@ -278,7 +301,6 @@ class RubyBackendTest(unittest.TestCase):
     def test_unsupported(self):
         self.unsupported("bitset B { bitfield<2> a; };\nbitset C : B { bitfield<2> b; };\n",
                          "bitset inheritance is not supported")
-        self.unsupported("interface I { void f(); };\n", "-Wbami is not for ruby", ["-Wbami"])
 
 
 if __name__ == "__main__":

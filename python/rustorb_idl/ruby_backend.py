@@ -41,6 +41,12 @@ operations, initializers or supported interfaces are their own factory.
 A value box is the boxed value itself; its module only names the type. An
 abstract interface is a module like an interface's, whose ``_narrow``
 keeps values.
+
+``-Wbami`` (callback AMI): the implied ``AMI_<I>Handler`` interfaces are
+ordinary interfaces on the runtime's ``Messaging::ReplyHandler``; the
+module of each interface gets ``sendc_<op>(ami_handler, <in and inout
+values>)`` (and ``sendc_get_<attr>`` / ``sendc_set_<attr>``), which call
+``CORBA::Object#_sendc``.
 """
 
 import math
@@ -844,6 +850,28 @@ class RubyBackend(object):
         w("::Rustorb::Values.register(%s%s)" % (name, ", default: true" if own else ""))
         w()
 
+    def sendc_methods(self, node):
+        """-Wbami: ``sendc_<op>(ami_handler, <in and inout values>)`` for the
+        operations and attributes of node (and its abstract bases; a
+        concrete base's module has its own)."""
+        w = self.w
+        for name, reply, op, ins in cxx_backend.CxxBackend.sendc_operations(self, node):
+            owner = self.full(op[6].parent)
+            args = ["ami_handler"] + [local_name(p) for p, _ in ins]
+            w()
+            w(
+                'def %s(%s) = _sendc(%s._ops["%s"], :%s, :%s, %s)'
+                % (
+                    method_name(name),
+                    ", ".join(args),
+                    self.path(owner),
+                    op[0],
+                    method_name(reply),
+                    method_name(reply + "_excep"),
+                    ", ".join(["ami_handler", "[%s]" % ", ".join(args[1:])]),
+                )
+            )
+
     def interface(self, node):
         w = self.w
         if getattr(node, "is_local", False):
@@ -905,6 +933,8 @@ class RubyBackend(object):
                 w("end")
             else:
                 w("def %s%s = %s" % (meth, "(%s)" % ", ".join(args) if args else "", call))
+        if fe.handler_of(node) is not None:
+            self.sendc_methods(node)
         w()
         w("::Rustorb.stub_class(self)")
         w.dedent()

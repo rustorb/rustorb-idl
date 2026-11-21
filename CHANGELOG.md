@@ -89,8 +89,10 @@ rustorb/rustorb; see its CHANGELOG.md for them.
   interface servants of it through `PortableServer::ServantMethods`),
   registered with `Rustorb::Values` (as their own factory when they have
   no behaviour); value boxes are the boxed values; abstract interfaces are
-  modules with `Rustorb::AbstractInterfaceModule`. `-Wbami` is an error
-  for now (rustorb/rustorb#188).
+  modules with `Rustorb::AbstractInterfaceModule`. `-bruby -Wbami`
+  (callback AMI, rustorb/rustorb#188): the `AMI_<I>Handler` interfaces on
+  the runtime's `Messaging::ReplyHandler`, and `sendc_<op>(ami_handler,
+  ...)` methods in the stubs, which call `CORBA::Object#_sendc`.
 
 - C: `-bc` writes the OMG C Language Mapping 1.0 (formal/99-07-35) for
   rustorb's C binding (librustorb_c, rustorb/rustorb#180, #181): a

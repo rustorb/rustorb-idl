@@ -22,7 +22,7 @@ The options follow omniidl where they mean the same thing:
   -Wbno_stubs       do not write the .pyi type stubs (python)
   -Wbami            also write the implied IDL of callback AMI: an
                     AMI_<I>Handler interface for each interface (python,
-                    c++11, java, csharp, c; rustorb's docs/ami.md)
+                    c++11, java, csharp, c, ruby; rustorb's docs/ami.md)
   -Wbh=SUFFIX       the header suffix (c++11, default .hh)
   -Wbs=SUFFIX       the source suffix (c++11, default .cc)
   -Wbextern=MODULE=PATH
@@ -139,9 +139,6 @@ def main(argv=None):
         if opt == "bami":
             if backend is rust_backend:
                 sys.stderr.write("rustorb-idl: -Wbami is not for rust: use the op_async methods of the stubs\n")
-                return 2
-            if backend is ruby_backend:
-                sys.stderr.write("rustorb-idl: -Wbami is not for ruby yet (rustorb#188)\n")
                 return 2
             ami = True
         elif backend is python_backend and opt.startswith("bglobal="):
