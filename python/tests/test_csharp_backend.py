@@ -34,6 +34,9 @@ IDLS = [
     os.path.join(INTEROP_IDL, "InteropTest.idl"),
     os.path.join(INTEROP_IDL, "AnyTest.idl"),
     os.path.join(INTEROP_IDL, "PoaProbe.idl"),
+    os.path.join(INTEROP_IDL, "ValueTest.idl"),
+    os.path.join(INTEROP_IDL, "CustomTest.idl"),
+    os.path.join(INTEROP_IDL, "AbstractTest.idl"),
     os.path.join(CPP_IDL, "CxxMapping.idl"),
     os.path.join(TEST_IDL, "CosNaming.idl"),
 ]
@@ -147,12 +150,49 @@ class CSharpBackendTest(unittest.TestCase):
         self.assertEqual(cli.main(["-bcsharp", "-Wbh=.h", "-C", OUT, path]), 2)
         self.assertEqual(cli.main(["-bcs", "-C", os.path.join(OUT, "cs"), path]), 0)
 
+    def test_valuetypes(self):
+        v = self.cs("ValueTest")
+        # 7.6: an abstract class with properties (private members
+        # protected), operations and factories abstract.
+        self.assertIn("public abstract class Point : global::Corba.ValueBase", v)
+        self.assertIn("public abstract class Point3 : global::ValueTest.Point", v)
+        self.assertIn('private static readonly string[] __ids = { "IDL:ValueTest/Point3:1.0", '
+                      '"IDL:ValueTest/Point:1.0" };', v)
+        self.assertIn('protected string label { get; set; } = "";', v)
+        self.assertIn("public abstract int doubled();", v)
+        self.assertIn("[global::Omg.Types.Factory]\n        public abstract void init(int balance);", v)
+        # A supported interface: its operations; the tie.
+        self.assertIn("public abstract class Tally : global::Corba.ValueBase, "
+                      "global::ValueTest.ICounterOperations", v)
+        self.assertIn("public class CounterPOATie : CounterPOA", v)
+        # The OBV_ class and the default factory of a valuetype without
+        # operations, none for one with.
+        self.assertIn("namespace OBV_ValueTest", v)
+        self.assertIn("public Point3(int x, int y, int z, string label)", v)
+        self.assertIn('global::Rustorb.Values.Default("IDL:ValueTest/Point:1.0", '
+                      "() => new global::OBV_ValueTest.Point());", v)
+        self.assertNotIn('Values.Default("IDL:ValueTest/Account:1.0"', v)
+        self.assertIn("[global::System.Runtime.CompilerServices.ModuleInitializer]", v)
+        # Value boxes.
+        self.assertIn("public class LongBox : global::Corba.ValueBase", v)
+        self.assertIn("public int value { get; set; }", v)
+        self.assertIn("global::Rustorb.TypeCodes.ValueBox(__id, \"LongBox\"", v)
+        c = self.cs("CustomTest")
+        self.assertIn("public abstract class Blob : global::Corba.ValueBase, global::Corba.ICustomMarshal", c)
+        self.assertIn("public abstract void marshal(global::Corba.DataOutputStream os);", c)
+        a = self.cs("AbstractTest")
+        # An abstract interface: the interface, the stub, read and written
+        # as a reference or a value.
+        self.assertIn("public interface INamed\n", a)
+        self.assertIn("public class Named : global::Corba.Object, INamed", a)
+        self.assertIn("public interface IPersonOperations : global::AbstractTest.INamed", a)
+        self.assertIn("public abstract class Card : global::Corba.ValueBase, global::AbstractTest.INamed", a)
+        self.assertIn("__out.write_abstract(__v);", a)
+        self.assertIn("tk_abstract_interface", a)
+
     def test_unsupported(self):
-        # rustorb#186: valuetypes, abstract and local interfaces; and the
-        # IDL 4 bitmask and bitset.
+        # Local interfaces (rustorb#186); the IDL 4 bitmask and bitset.
         cases = {
-            "valuetype": "module U { valuetype V { public long x; }; };",
-            "abstract": "module U { abstract interface A { void a(); }; };",
             "local": "module U { local interface L { void a(); }; };",
             "bitmask": "module U { bitmask B { X, Y }; };",
         }

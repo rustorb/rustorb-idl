@@ -8,6 +8,21 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ### Added
 
+- C#: valuetypes, value boxes, custom valuetypes and abstract interfaces
+  in `-bcsharp` (rustorb/rustorb#186). A valuetype is the abstract class
+  of IDL4 to C# 7.6 (state members as properties, private ones protected;
+  operations, those of supported interfaces and `[Omg.Types.Factory]`
+  initializers abstract) on its concrete base or `Corba.ValueBase`, with
+  its `_truncatable_ids`, `_write` and `_read`; one without operations
+  also gets `OBV_<Module>.<Name>`, a concrete class with a constructor of
+  every state member, which its default factory makes. An abstract
+  valuetype is the interface `I<Name>`; a value box a class with the
+  property `value`; a custom valuetype implements `Corba.ICustomMarshal`.
+  An abstract interface is `I<Name>` and a stub class, read and written as
+  a reference or a value. A module initializer registers the default
+  factories and the TypeCodes of the valuetypes. Every interface also gets
+  the tie `<Name>POATie`.
+
 - Ruby: `-bruby` (also `-brb`) writes the OMG Ruby Language Mapping (RCLM
   1.2, formal/2013-04-05) for rustorb's Ruby binding (the `rustorb` gem,
   rustorb/rustorb#183, #184): `<File>C.rb` with the types (structs, unions
@@ -45,8 +60,8 @@ rustorb/rustorb; see its CHANGELOG.md for them.
   all-values constructors), enums, constants in `Constants` and Helpers
   with the TypeCode, Any insertion and extraction, and the marshalling.
   `-Wbdotnet_naming` uses the .NET naming scheme (PascalCase, 7.1.1.2).
-  Valuetypes, abstract and local interfaces, bitmasks, bitsets and
-  `-Wbami` are errors for now (rustorb/rustorb#186, rustorb/rustorb#178).
+  Local interfaces, bitmasks, bitsets and `-Wbami` are errors for now
+  (rustorb/rustorb#186, rustorb/rustorb#178).
 
 - Rust: with `-Wbdds_only -Wbxtypes`, the interfaces marked `@DDSService`
   get the function-call style of DDS-RPC 1.0 for rustorb-dds: the implied

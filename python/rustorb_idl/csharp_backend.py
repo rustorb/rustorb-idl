@@ -28,8 +28,21 @@ The names are those of the IDL (the IDL naming scheme, 7.1.1.1);
 instead. Names that are C# keywords get ``@``, and names that clash with
 the ones the mapping or the runtime introduces get ``_``.
 
-Valuetypes, abstract and local interfaces and ``-Wbami`` are not mapped
-yet (rustorb#186).
+A valuetype ``V`` is the abstract class ``V`` of IDL4 to C# 7.6 (state
+members as properties, private ones protected; operations, those of the
+interfaces it supports and factories as abstract methods, factories marked
+``[Omg.Types.Factory]``), deriving from its concrete base or
+``Corba.ValueBase``; an abstract valuetype is the interface ``IV``. The
+rest is rustorb's, after the C++ mapping: a valuetype without operations
+also has the class ``OBV_<Module>.V`` with a constructor of every state
+member, which its default factory makes; a value box is a class with the
+boxed value as the property ``value``; a custom valuetype implements
+``Corba.ICustomMarshal``. The default factories and the TypeCodes of the
+valuetypes are registered by a module initialiser. An abstract interface
+``A`` is the interface ``IA`` and the stub class ``A``; each concrete
+interface also has the tie ``<Name>POATie``.
+
+Local interfaces and ``-Wbami`` are not mapped yet (rustorb#186).
 """
 
 import os
@@ -273,7 +286,7 @@ class CSharpBackend(object):
     def scoped(self, node):
         """The fully qualified C# type of a definition."""
         n = self.full(node)
-        if fe.is_interface(n):
+        if fe.is_interface(n) or (fe.is_valuetype(n) and n.is_abstract and not n.is_boxed):
             return self.qualify(n, self.iface_name(n))
         return self.qualify(n, self.type_name(n))
 
@@ -293,10 +306,6 @@ class CSharpBackend(object):
     # -- types -----------------------------------------------------------
 
     def unsupported(self, n, where):
-        if fe.is_valuetype(n):
-            raise fe.GeneratorError(
-                "valuetypes are not supported by the C# backend yet (rustorb#186)", where
-            )
         if fe.is_native(n):
             raise fe.GeneratorError("native %s cannot be used in C#" % n.name, where)
 
@@ -333,14 +342,12 @@ class CSharpBackend(object):
             if fe.is_interface(n):
                 self.check_interface(n, where)
                 return self.scoped(n) + "?"
+            if fe.is_valuetype(n):
+                return self.scoped(n) + "?"
             return self.scoped(n)
         raise fe.GeneratorError("no C# type for %r" % t, where)
 
     def check_interface(self, n, where):
-        if getattr(n, "is_abstract", False):
-            raise fe.GeneratorError(
-                "abstract interfaces are not supported by the C# backend yet (rustorb#186)", where
-            )
         if getattr(n, "is_local", False):
             raise fe.GeneratorError(
                 "local interfaces are not supported by the C# backend yet (rustorb#186)", where
@@ -624,7 +631,8 @@ class CSharpBackend(object):
         r = t.resolved()
         if r.kind in MIN_SIZE:
             return MIN_SIZE[r.kind]
-        if r.kind == "named" and (fe.is_enum(r.node) or fe.is_interface(r.node)):
+        if r.kind == "named" and (fe.is_enum(r.node) or fe.is_interface(r.node)
+                                  or fe.is_valuetype(r.node)):
             return 4
         return 1
 
@@ -664,26 +672,42 @@ class CSharpBackend(object):
         w = Writer()
         w(HEADER % self.idl_name)
         w("#nullable enable")
-        w("#pragma warning disable CS0108, CS0114, CS1591, CS8981")
+        w("#pragma warning disable CS0108, CS0114, CS1591, CS8981, CA2255")
+        self.registrations = []
         for it in fe.definitions(self.spec):
             n = it.node
             if fe.is_module(n) or fe.is_operation(n) or fe.is_attribute(n):
                 continue
+            self.extra = []
             body = Writer()
             self.definition(body, n)
-            if not body.lines:
-                continue
+            for ns, lines in [(self.namespace_of(n), body.lines)] + self.extra:
+                if not lines:
+                    continue
+                w()
+                if ns:
+                    w("namespace %s" % ns)
+                    w("{")
+                    w.indent()
+                for line in lines:
+                    w(line) if line else w()
+                if ns:
+                    w.dedent()
+                    w("}")
+        if self.registrations:
+            # The default factories and TypeCodes of the valuetypes, known to
+            # the runtime when the assembly is loaded.
+            name = re.sub(r"\W", "_", os.path.splitext(self.idl_name)[0])
             w()
-            ns = self.namespace_of(n)
-            if ns:
-                w("namespace %s" % ns)
-                w("{")
-                w.indent()
-            for line in body.lines:
-                w(line) if line else w()
-            if ns:
-                w.dedent()
-                w("}")
+            w("internal static class __RustorbValues_%s" % name)
+            w("{")
+            w("    [global::System.Runtime.CompilerServices.ModuleInitializer]")
+            w("    internal static void Register()")
+            w("    {")
+            for line in self.registrations:
+                w("        " + line)
+            w("    }")
+            w("}")
         return w.text()
 
     def definition(self, w, node):
@@ -708,9 +732,11 @@ class CSharpBackend(object):
         elif fe.is_native(node):
             pass
         elif fe.is_valuetype(node):
-            raise fe.GeneratorError(
-                "valuetypes are not supported by the C# backend yet (rustorb#186)", node
-            )
+            if not fe.is_forward(node):
+                if node.is_boxed:
+                    self.value_box(w, node)
+                else:
+                    self.valuetype(w, node)
         else:
             raise fe.GeneratorError(
                 "%s definitions are not supported by the C# backend" % fe.kind_name(node), node
@@ -1170,6 +1196,272 @@ class CSharpBackend(object):
             v = int(label)
         return "%dUL" % (v & ((1 << 64) - 1))
 
+    # valuetypes
+
+    def state_members(self, node):
+        return cxx_backend.CxxBackend.state_members(self, node)
+
+    def all_state_members(self, node):
+        return cxx_backend.CxxBackend.all_state_members(self, node)
+
+    def value_ops(self, node):
+        """The operations a value of ``node`` has: its own, those of its
+        abstract base valuetypes and those of the interfaces it supports
+        (with their bases), each once, as :meth:`operations` lists them."""
+        ops = []
+        seen = set()
+
+        def add(n):
+            for o in self.operations(n):
+                if o[0] not in seen:
+                    seen.add(o[0])
+                    ops.append(o)
+
+        def walk(v):
+            add(v)
+            for b in fe.value_bases(v):
+                b = self.full(b)
+                if b.is_abstract:
+                    walk(b)
+            for i in fe.supported_interfaces(v):
+                i = self.full(i)
+                for n in [i] + self.ancestors(i):
+                    add(self.full(n))
+
+        walk(node)
+        return ops
+
+    def inherited_value_ops(self, node):
+        """The operation names the concrete base valuetypes declare."""
+        base = fe.concrete_base(node)
+        if base is None:
+            return set()
+        base = self.full(base)
+        return set(o[0] for o in self.value_ops(base)) | self.inherited_value_ops(base)
+
+    def value_implements(self, node):
+        """The interfaces the class of a valuetype implements: its abstract
+        base valuetypes, the operations of the interfaces it supports, the
+        abstract interfaces it supports."""
+        out = [self.scoped(self.full(b)) for b in fe.value_bases(node) if b.is_abstract]
+        for i in fe.supported_interfaces(node):
+            out.append(self.operations_name(self.full(i)))
+        return out
+
+    def obv_namespace(self, node):
+        """The namespace of the OBV_ class of a valuetype (as for C++,
+        OBV_ before the outermost module), or "" outside modules."""
+        ns = self.namespace_of(node)
+        return ("OBV_" + ns) if ns else ""
+
+    def valuetype(self, w, node):
+        cxx_backend.CxxBackend.check_value(self, node)
+        for d in fe.members_of(node):
+            if not (fe.is_operation(d) or fe.is_attribute(d) or fe.is_const(d)
+                    or hasattr(d, "is_public") or d in node.factories):
+                raise fe.GeneratorError(
+                    "types defined in a valuetype are not supported by the C# backend", d)
+        name = self.type_name(node)
+        bare = name.lstrip("@")
+        base = fe.concrete_base(node)
+        base = self.full(base) if base is not None else None
+        members = self.state_members(node)
+        props = [(m, t, public, self.member_name(m, bare)) for m, t, public in members]
+        inherited = self.inherited_value_ops(node)
+        ops = [o for o in self.value_ops(node) if o[0] not in inherited]
+        consts = [d for d in fe.members_of(node) if fe.is_const(d)]
+        if node.is_abstract:
+            iname = self.iface_name(node)
+            ext = self.value_implements(node) or ["%s.IValueBase" % CORBA]
+            w("public interface %s : %s" % (iname, ", ".join(ext)))
+            w("{")
+            w.indent()
+            self.interface_members(w, self.op_members(node, self.operations(node)))
+            w.dedent()
+            w("}")
+            w()
+        else:
+            ext = [self.scoped(base) if base is not None else "%s.ValueBase" % CORBA]
+            if node.is_custom:
+                ext.append("%s.ICustomMarshal" % CORBA)
+            ext += self.value_implements(node)
+            w("/// <summary>The valuetype %s: derive from it (or from OBV_ classes, for" % node.name)
+            w("/// valuetypes without operations) to make instances.</summary>")
+            w("public abstract class %s : %s" % (name, ", ".join(ext)))
+            w("{")
+            w.indent()
+            w("private static readonly string[] __ids = { %s };" % ", ".join(
+                '"%s"' % i for i in cxx_backend.CxxBackend.sent_ids(self, node)))
+            w()
+            for m, t, public, p in props:
+                d = self.default(t, node)
+                w("%s %s %s { get; set; }%s" % ("public" if public else "protected", self.cstype(t, node), p,
+                                               (" = %s;" % d) if d is not None else ""))
+            if props:
+                w()
+            for c in consts:
+                t = fe.type_of(c.type, c)
+                w("public const %s %s = %s;" % (self.cstype(t, c), self.const_name(c.name),
+                                                self.literal(c.value, t)))
+                w()
+            for m in self.op_members(node, ops):
+                self.interface_members(w, [m], "public abstract ")
+                w()
+            for f in node.factories:
+                params = [(a.name, fe.type_of(a.type, a), "in") for a in f.arguments]
+                w("[global::Omg.Types.Factory]")
+                w("public abstract void %s(%s);" % (self.member_name(f.name), self.params_decl(params, node)))
+                w()
+            if node.is_custom:
+                w("public abstract void marshal(%s.DataOutputStream os);" % CORBA)
+                w()
+                w("public abstract void unmarshal(%s.DataInputStream @is);" % CORBA)
+                w()
+            w("public override string[] _truncatable_ids() => __ids;")
+            if not node.is_custom:
+                for fn, arg, op in (("_write", OUT, self.write), ("_read", IN, self.read)):
+                    v = "__out" if fn == "_write" else "__in"
+                    w()
+                    w("public override void %s(%s %s)" % (fn, arg, v))
+                    w("{")
+                    w.indent()
+                    if base is not None:
+                        w("base.%s(%s);" % (fn, v))
+                    for m, t, public, p in props:
+                        op(w, t, "this." + p, 0, node)
+                    w.dedent()
+                    w("}")
+            w.dedent()
+            w("}")
+            w()
+            if not node.is_custom and not fe.has_behaviour(node):
+                self.obv_class(node)
+        self.value_helper(w, node, base, members)
+
+    def obv_class(self, node):
+        """OBV_<Module>.<Name>: the class of a valuetype without operations,
+        with a constructor that takes every state member; its default
+        factory makes them."""
+        name = self.type_name(node)
+        bare = name.lstrip("@")
+        ns = self.obv_namespace(node)
+        cls = name if ns else "OBV_" + bare
+        everything = self.all_state_members(node)
+        w = Writer()
+        w("public class %s : %s" % (cls, self.scoped(node)))
+        w("{")
+        w.indent()
+        w("public %s()" % cls.lstrip("@"))
+        w("{")
+        w("}")
+        if everything:
+            w()
+            w("public %s(%s)" % (cls.lstrip("@"), ", ".join(
+                "%s %s" % (self.cstype(t, node), self.param_name(m)) for m, t, _ in everything)))
+            w("{")
+            for m, t, _ in everything:
+                w("    this.%s = %s;" % (self.member_name(m, self.owner_of(node, m)), self.param_name(m)))
+            w("}")
+        w.dedent()
+        w("}")
+        w()
+        self.extra.append((ns, w.lines))
+        full = "global::" + ((ns + ".") if ns else "") + cls
+        self.registrations.append('global::Rustorb.Values.Default("%s", () => new %s());'
+                                  % (fe.repository_id(node), full))
+
+    def owner_of(self, node, member):
+        """The bare class name of the valuetype (node or a base) that
+        declares the state member."""
+        n = node
+        while n is not None:
+            if any(m.name == member for m in n.state_members):
+                return self.type_name(n).lstrip("@")
+            b = fe.concrete_base(n)
+            n = self.full(b) if b is not None else None
+        return None
+
+    def value_helper(self, w, node, base, members):
+        scoped = self.scoped(node)
+        if node.is_abstract:
+            modifier = 2
+        elif node.is_custom:
+            modifier = 1
+        elif node.is_truncatable:
+            modifier = 3
+        else:
+            modifier = 0
+        tc = '%s.TypeCodes.Value(%s.TCKind.tk_value, __id, "%s", %d, %s, new string[] { %s }, new %s[] { %s }, new short[] { %s })' % (
+            RT, CORBA, node.name, modifier,
+            ("%s.type()" % self.helper(base)) if base is not None else "null",
+            ", ".join('"%s"' % m for m, _, _ in members), TC,
+            ", ".join(self.tc_expr(t, node) for _, t, _ in members),
+            ", ".join("1" if public else "0" for _, _, public in members))
+        self.registrations.append('global::Rustorb.Values.Type("%s", %s.type);'
+                                  % (fe.repository_id(node), self.helper(node)))
+
+        def read_body(w):
+            w("var __r = __in.read_value(__id);")
+            w("if (__r != null && __r is not %s) { __in.fail(); return null; }" % scoped)
+            w("return (%s?)__r;" % scoped)
+
+        self.helper_class(w, node, scoped + "?", tc, lambda w: w("__out.write_value(__v);"), read_body)
+
+    def value_box(self, w, node):
+        """A value box: a class with the boxed value as the property value."""
+        name = self.type_name(node)
+        bare = name.lstrip("@")
+        scoped = self.scoped(node)
+        t = fe.type_of(node.boxed_type, node)
+        cst = self.cstype(t, node)
+        d = self.default(t, node)
+        w("/// <summary>The value box %s.</summary>" % node.name)
+        w("public class %s : %s.ValueBase" % (name, CORBA))
+        w("{")
+        w.indent()
+        w('private static readonly string[] __ids = { "%s" };' % fe.repository_id(node))
+        w()
+        w("public %s value { get; set; }%s" % (cst, (" = %s;" % d) if d is not None else ""))
+        w()
+        w("public %s()" % bare)
+        w("{")
+        w("}")
+        w()
+        w("public %s(%s value)" % (bare, cst))
+        w("{")
+        w("    this.value = value;")
+        w("}")
+        w()
+        w("public override string[] _truncatable_ids() => __ids;")
+        w()
+        w("public override void _write(%s __out)" % OUT)
+        w("{")
+        w.indent()
+        self.write(w, t, "this.value", 0, node)
+        w.dedent()
+        w("}")
+        w()
+        w("public override void _read(%s __in)" % IN)
+        w("{")
+        w.indent()
+        self.read(w, t, "this.value", 0, node)
+        w.dedent()
+        w("}")
+        w.dedent()
+        w("}")
+        w()
+        rid = fe.repository_id(node)
+        self.registrations.append('global::Rustorb.Values.Default("%s", () => new %s());' % (rid, scoped))
+        self.registrations.append('global::Rustorb.Values.Type("%s", %s.type);' % (rid, self.helper(node)))
+        tc = '%s.TypeCodes.ValueBox(__id, "%s", %s)' % (RT, node.name, self.tc_expr(t, node))
+
+        def read_body(w):
+            w("var __r = __in.read_value(__id);")
+            w("if (__r != null && __r is not %s) { __in.fail(); return null; }" % scoped)
+            w("return (%s?)__r;" % scoped)
+
+        self.helper_class(w, node, scoped + "?", tc, lambda w: w("__out.write_value(__v);"), read_body)
+
     # interfaces
 
     def bases(self, node):
@@ -1231,8 +1523,33 @@ class CSharpBackend(object):
                 out.append(["op"] + list(o))
         return out
 
+    def operations_name(self, node):
+        """The interface with the operations of an interface: I<Name>Operations,
+        or I<Name> itself for an abstract interface."""
+        if self.is_abstract(node):
+            return self.qualify(node, self.iface_name(node))
+        return self.qualify(node, self.iface_name(node) + "Operations")
+
+    def interface_members(self, w, members, prefix=""):
+        """The operations and attributes of an interface (``members`` from
+        :meth:`op_members`) as declarations."""
+        for m in members:
+            if m[0] == "attr":
+                _, aname, t, readonly, _, _, d = m
+                w("%s%s %s { get;%s }" % (prefix, self.cstype(t, d), self.member_name(aname),
+                                          "" if readonly else " set;"))
+            else:
+                _, opname, method, ret, params, excs, oneway, d = m
+                for e in excs:
+                    w('/// <exception cref="%s">%s</exception>' % (self.scoped(e).replace("global::", ""), e.name))
+                w("%s%s %s(%s);" % (prefix, self.cstype(ret, d), self.member_name(method),
+                                    self.params_decl(params, d)))
+
     def interface(self, w, node):
         self.check_interface(node, node)
+        if self.is_abstract(node):
+            self.abstract_interface(w, node)
+            return
         cls = self.class_name(node)
         bare = cls.lstrip("@")
         iname = self.iface_name(node)
@@ -1242,33 +1559,48 @@ class CSharpBackend(object):
         ops = self.operations(node)
         members = self.op_members(node, ops)
 
-        # I<Name>Operations
-        ext = [self.qualify(b, self.iface_name(b) + "Operations") for b in bases]
+        # I<Name>Operations (it extends the abstract interfaces the interface
+        # inherits, which have no operations interface)
+        ext = [self.operations_name(b) for b in bases]
         w("public interface %sOperations%s" % (iname, (" : " + ", ".join(ext)) if ext else ""))
         w("{")
         w.indent()
-        for m in members:
-            if m[0] == "attr":
-                _, aname, t, readonly, _, _, d = m
-                w("%s %s { get;%s }" % (self.cstype(t, d), self.member_name(aname),
-                                        "" if readonly else " set;"))
-            else:
-                _, opname, method, ret, params, excs, oneway, d = m
-                for e in excs:
-                    w('/// <exception cref="%s">%s</exception>' % (self.scoped(e).replace("global::", ""), e.name))
-                w("%s %s(%s);" % (self.cstype(ret, d), self.member_name(method),
-                                  self.params_decl(params, d)))
+        self.interface_members(w, members)
         w.dedent()
         w("}")
         w()
         # I<Name>
-        ext = ["%s.IObject" % CORBA] + [self.qualify(b, self.iface_name(b)) for b in bases] + [
-            iname + "Operations"]
+        ext = ["%s.IObject" % CORBA] + [self.qualify(b, self.iface_name(b)) for b in bases
+                                        if not self.is_abstract(b)] + [iname + "Operations"]
         w("public interface %s : %s" % (iname, ", ".join(ext)))
         w("{")
         w("}")
         w()
-        # The class <Name>: the stub, with the nested types and constants.
+        self.stub_class(w, node, iname)
+        scoped_i = self.qualify(node, iname)
+        stub = self.qualify(node, cls)
+        tc = '%s.TypeCodes.Interface(%s.TCKind.tk_objref, __id, "%s")' % (RT, CORBA, node.name)
+
+        def narrow(w):
+            w("public static %s? narrow(%s.IObject? obj) =>" % (scoped_i, CORBA))
+            w("    %s.Stubs.Narrow<%s>(obj, __id, o => new %s(o));" % (RT, scoped_i, stub))
+            w()
+            w("public static %s? unchecked_narrow(%s.IObject? obj) =>" % (scoped_i, CORBA))
+            w("    %s.Stubs.UncheckedNarrow<%s>(obj, o => new %s(o));" % (RT, scoped_i, stub))
+
+        self.helper_class(
+            w, node, scoped_i + "?", tc,
+            lambda w: w("__out.write_Object(__v);"),
+            lambda w: w("return unchecked_narrow(__in.read_Object());"),
+            extra=narrow,
+        )
+        self.skeleton(w, node)
+        self.tie(w, node)
+
+    def stub_class(self, w, node, iname):
+        """The class <Name>: the stub, with the nested types and constants."""
+        cls = self.class_name(node)
+        bare = cls.lstrip("@")
         w("/// <summary>The object reference (stub) of %s, and the types and constants" % node.name)
         w("/// defined in it.</summary>")
         w("public class %s : %s.Object, %s" % (cls, CORBA, iname))
@@ -1290,24 +1622,100 @@ class CSharpBackend(object):
         w.dedent()
         w("}")
         w()
+
+    def abstract_interface(self, w, node):
+        """An abstract interface A: the interface IA with the operations,
+        which stubs (the class A, for references received as A) and values
+        (of valuetypes that support it) implement."""
+        cls = self.class_name(node)
+        iname = self.iface_name(node)
+        bases = self.bases(node)
+        ext = [self.qualify(b, self.iface_name(b)) for b in bases]
+        w("public interface %s%s" % (iname, (" : " + ", ".join(ext)) if ext else ""))
+        w("{")
+        w.indent()
+        self.interface_members(w, self.op_members(node, self.operations(node)))
+        w.dedent()
+        w("}")
+        w()
+        self.stub_class(w, node, iname)
         scoped_i = self.qualify(node, iname)
         stub = self.qualify(node, cls)
-        tc = '%s.TypeCodes.Interface(%s.TCKind.tk_objref, __id, "%s")' % (RT, CORBA, node.name)
+        tc = '%s.TypeCodes.Interface(%s.TCKind.tk_abstract_interface, __id, "%s")' % (RT, CORBA, node.name)
 
         def narrow(w):
-            w("public static %s? narrow(%s.IObject? obj) =>" % (scoped_i, CORBA))
-            w("    %s.Stubs.Narrow<%s>(obj, __id, o => new %s(o));" % (RT, scoped_i, stub))
-            w()
-            w("public static %s? unchecked_narrow(%s.IObject? obj) =>" % (scoped_i, CORBA))
-            w("    %s.Stubs.UncheckedNarrow<%s>(obj, o => new %s(o));" % (RT, scoped_i, stub))
+            # An object or a value: a reference becomes a stub, a value must
+            # implement the interface.
+            for checked in (True, False):
+                w("public static %s? %s(object? obj)" % (scoped_i, "narrow" if checked else "unchecked_narrow"))
+                w("{")
+                w.indent()
+                w("if (obj == null) return null;")
+                w("if (obj is %s __n) return __n;" % scoped_i)
+                w("if (obj is not %s.Object __o)" % CORBA)
+                w("    throw new %s.BAD_PARAM(\"neither a reference nor a value of %s\", 0, %s.CompletionStatus.COMPLETED_NO);"
+                  % (CORBA, node.name, CORBA))
+                if checked:
+                    w("return %s.Stubs.Narrow<%s>(__o, __id, o => new %s(o));" % (RT, scoped_i, stub))
+                else:
+                    w("return new %s(__o);" % stub)
+                w.dedent()
+                w("}")
+                if checked:
+                    w()
 
         self.helper_class(
             w, node, scoped_i + "?", tc,
-            lambda w: w("__out.write_Object(__v);"),
-            lambda w: w("return unchecked_narrow(__in.read_Object());"),
+            lambda w: w("__out.write_abstract(__v);"),
+            lambda w: w("return unchecked_narrow(__in.read_abstract());"),
             extra=narrow,
         )
-        self.skeleton(w, node)
+
+    def tie(self, w, node):
+        """<Name>POATie: a servant that forwards to an implementation of
+        I<Name>Operations (a valuetype that supports the interface, say)."""
+        cls = self.class_name(node).lstrip("@")
+        ops_i = self.qualify(node, self.iface_name(node) + "Operations")
+        w("/// <summary>The servant of %s that delegates to an implementation of its operations.</summary>"
+          % node.name)
+        w("public class %sPOATie : %sPOA" % (cls, cls))
+        w("{")
+        w.indent()
+        w("private %s __impl;" % ops_i)
+        w()
+        w("public %sPOATie(%s impl)" % (cls, ops_i))
+        w("{")
+        w("    __impl = impl;")
+        w("}")
+        w()
+        w("public %s _delegate" % ops_i)
+        w("{")
+        w("    get => __impl;")
+        w("    set => __impl = value;")
+        w("}")
+        for m in self.op_members(node, self.all_operations(node)):
+            w()
+            if m[0] == "attr":
+                _, aname, t, readonly, _, _, d = m
+                n = self.member_name(aname)
+                w("public override %s %s" % (self.cstype(t, d), n))
+                w("{")
+                w("    get => __impl.%s;" % n)
+                if not readonly:
+                    w("    set => __impl.%s = value;" % n)
+                w("}")
+            else:
+                _, opname, method, ret, params, excs, oneway, d = m
+                args = []
+                for p, t, dr in params:
+                    pre = "" if dr == "in" else ("ref " if dr == "inout" else "out ")
+                    args.append(pre + self.param_name(p))
+                w("public override %s %s(%s) =>" % (self.cstype(ret, d), self.member_name(method),
+                                                    self.params_decl(params, d)))
+                w("    __impl.%s(%s);" % (self.member_name(method), ", ".join(args)))
+        w.dedent()
+        w("}")
+        w()
 
     def call(self, w, opname, oneway, ret, params, excs, d, target="this"):
         """The body of a stub method: Stubs.Invoke with lambdas, through

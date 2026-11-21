@@ -3,7 +3,7 @@
 // This file is not covered by the license of rustorb-idl.
 
 #nullable enable
-#pragma warning disable CS0108, CS0114, CS1591, CS8981
+#pragma warning disable CS0108, CS0114, CS1591, CS8981, CA2255
 
 namespace InteropTest
 {
@@ -1394,6 +1394,26 @@ namespace InteropTest
                     throw global::Rustorb.Servants.BadOperation();
             }
         }
+    }
+
+    /// <summary>The servant of Callback that delegates to an implementation of its operations.</summary>
+    public class CallbackPOATie : CallbackPOA
+    {
+        private global::InteropTest.ICallbackOperations __impl;
+
+        public CallbackPOATie(global::InteropTest.ICallbackOperations impl)
+        {
+            __impl = impl;
+        }
+
+        public global::InteropTest.ICallbackOperations _delegate
+        {
+            get => __impl;
+            set => __impl = value;
+        }
+
+        public override string Notify(string message) =>
+            __impl.Notify(message);
     }
 
 }
@@ -2814,6 +2834,151 @@ namespace InteropTest
                     throw global::Rustorb.Servants.BadOperation();
             }
         }
+    }
+
+    /// <summary>The servant of Echo that delegates to an implementation of its operations.</summary>
+    public class EchoPOATie : EchoPOA
+    {
+        private global::InteropTest.IEchoOperations __impl;
+
+        public EchoPOATie(global::InteropTest.IEchoOperations impl)
+        {
+            __impl = impl;
+        }
+
+        public global::InteropTest.IEchoOperations _delegate
+        {
+            get => __impl;
+            set => __impl = value;
+        }
+
+        public override bool EchoBoolean(bool v) =>
+            __impl.EchoBoolean(v);
+
+        public override byte EchoOctet(byte v) =>
+            __impl.EchoOctet(v);
+
+        public override char EchoChar(char v) =>
+            __impl.EchoChar(v);
+
+        public override char EchoWchar(char v) =>
+            __impl.EchoWchar(v);
+
+        public override short EchoShort(short v) =>
+            __impl.EchoShort(v);
+
+        public override ushort EchoUshort(ushort v) =>
+            __impl.EchoUshort(v);
+
+        public override int EchoLong(int v) =>
+            __impl.EchoLong(v);
+
+        public override uint EchoUlong(uint v) =>
+            __impl.EchoUlong(v);
+
+        public override long EchoLonglong(long v) =>
+            __impl.EchoLonglong(v);
+
+        public override ulong EchoUlonglong(ulong v) =>
+            __impl.EchoUlonglong(v);
+
+        public override float EchoFloat(float v) =>
+            __impl.EchoFloat(v);
+
+        public override double EchoDouble(double v) =>
+            __impl.EchoDouble(v);
+
+        public override string EchoString(string v) =>
+            __impl.EchoString(v);
+
+        public override string EchoWstring(string v) =>
+            __impl.EchoWstring(v);
+
+        public override global::InteropTest.Color EchoColor(global::InteropTest.Color v) =>
+            __impl.EchoColor(v);
+
+        public override global::InteropTest.Point EchoPoint(global::InteropTest.Point v) =>
+            __impl.EchoPoint(v);
+
+        public override global::InteropTest.Record EchoRecord(global::InteropTest.Record v) =>
+            __impl.EchoRecord(v);
+
+        public override global::Omg.Types.ISequence<global::InteropTest.Record> EchoRecords(global::Omg.Types.ISequence<global::InteropTest.Record> v) =>
+            __impl.EchoRecords(v);
+
+        public override global::InteropTest.Value EchoValue(global::InteropTest.Value v) =>
+            __impl.EchoValue(v);
+
+        public override global::InteropTest.Shade EchoShade(global::InteropTest.Shade v) =>
+            __impl.EchoShade(v);
+
+        public override int[] EchoLongArray(int[] v) =>
+            __impl.EchoLongArray(v);
+
+        public override double[][] EchoMatrix(double[][] v) =>
+            __impl.EchoMatrix(v);
+
+        public override global::Omg.Types.ISequence<int> EchoLongSeq(global::Omg.Types.ISequence<int> v) =>
+            __impl.EchoLongSeq(v);
+
+        public override global::Omg.Types.ISequence<string> EchoStringSeq(global::Omg.Types.ISequence<string> v) =>
+            __impl.EchoStringSeq(v);
+
+        public override global::Omg.Types.ISequence<byte> EchoOctets(global::Omg.Types.ISequence<byte> v) =>
+            __impl.EchoOctets(v);
+
+        public override int Swap(ref int a, ref int b) =>
+            __impl.Swap(ref a, ref b);
+
+        public override int Divide(int a, int b, out int remainder) =>
+            __impl.Divide(a, b, out remainder);
+
+        public override void Make(int x, out global::InteropTest.Point p, out global::InteropTest.Record r) =>
+            __impl.Make(x, out p, out r);
+
+        public override void Fail(int code, string reason) =>
+            __impl.Fail(code, reason);
+
+        public override void FailSystem() =>
+            __impl.FailSystem();
+
+        public override int Counter
+        {
+            get => __impl.Counter;
+            set => __impl.Counter = value;
+        }
+
+        public override string Name
+        {
+            get => __impl.Name;
+        }
+
+        public override void Post(string message) =>
+            __impl.Post(message);
+
+        public override global::Omg.Types.ISequence<string> Posted() =>
+            __impl.Posted();
+
+        public override global::InteropTest.IEcho? SelfRef() =>
+            __impl.SelfRef();
+
+        public override global::InteropTest.IEcho? EchoRef(global::InteropTest.IEcho? other) =>
+            __impl.EchoRef(other);
+
+        public override bool IsNil(global::InteropTest.IEcho? other) =>
+            __impl.IsNil(other);
+
+        public override string CallBack(global::InteropTest.ICallback? cb, string message) =>
+            __impl.CallBack(cb, message);
+
+        public override void RegisterCallback(global::InteropTest.ICallback? cb) =>
+            __impl.RegisterCallback(cb);
+
+        public override string Trigger(string message) =>
+            __impl.Trigger(message);
+
+        public override void Shutdown() =>
+            __impl.Shutdown();
     }
 
 }

@@ -3,7 +3,7 @@
 // This file is not covered by the license of rustorb-idl.
 
 #nullable enable
-#pragma warning disable CS0108, CS0114, CS1591, CS8981
+#pragma warning disable CS0108, CS0114, CS1591, CS8981, CA2255
 
 public static partial class Constants
 {
@@ -3372,6 +3372,37 @@ namespace CxxMapping
         }
     }
 
+    /// <summary>The servant of Base that delegates to an implementation of its operations.</summary>
+    public class BasePOATie : BasePOA
+    {
+        private global::CxxMapping.IBaseOperations __impl;
+
+        public BasePOATie(global::CxxMapping.IBaseOperations impl)
+        {
+            __impl = impl;
+        }
+
+        public global::CxxMapping.IBaseOperations _delegate
+        {
+            get => __impl;
+            set => __impl = value;
+        }
+
+        public override int id
+        {
+            get => __impl.id;
+        }
+
+        public override string label
+        {
+            get => __impl.label;
+            set => __impl.label = value;
+        }
+
+        public override void base_op(bool fail) =>
+            __impl.base_op(fail);
+    }
+
 }
 
 namespace CxxMapping
@@ -3689,6 +3720,46 @@ namespace CxxMapping
         }
     }
 
+    /// <summary>The servant of Derived that delegates to an implementation of its operations.</summary>
+    public class DerivedPOATie : DerivedPOA
+    {
+        private global::CxxMapping.IDerivedOperations __impl;
+
+        public DerivedPOATie(global::CxxMapping.IDerivedOperations impl)
+        {
+            __impl = impl;
+        }
+
+        public global::CxxMapping.IDerivedOperations _delegate
+        {
+            get => __impl;
+            set => __impl = value;
+        }
+
+        public override int derived_op(int a, ref int b, out int c) =>
+            __impl.derived_op(a, ref b, out c);
+
+        public override void notify(string msg) =>
+            __impl.notify(msg);
+
+        public override global::CxxMapping.IBase? as_base() =>
+            __impl.as_base();
+
+        public override int id
+        {
+            get => __impl.id;
+        }
+
+        public override string label
+        {
+            get => __impl.label;
+            set => __impl.label = value;
+        }
+
+        public override void base_op(bool fail) =>
+            __impl.base_op(fail);
+    }
+
 }
 
 namespace CxxMapping
@@ -3809,6 +3880,26 @@ namespace CxxMapping
                     throw global::Rustorb.Servants.BadOperation();
             }
         }
+    }
+
+    /// <summary>The servant of Other that delegates to an implementation of its operations.</summary>
+    public class OtherPOATie : OtherPOA
+    {
+        private global::CxxMapping.IOtherOperations __impl;
+
+        public OtherPOATie(global::CxxMapping.IOtherOperations impl)
+        {
+            __impl = impl;
+        }
+
+        public global::CxxMapping.IOtherOperations _delegate
+        {
+            get => __impl;
+            set => __impl = value;
+        }
+
+        public override string other_op() =>
+            __impl.other_op();
     }
 
 }
@@ -4181,6 +4272,52 @@ namespace CxxMapping
         }
     }
 
+    /// <summary>The servant of Multi that delegates to an implementation of its operations.</summary>
+    public class MultiPOATie : MultiPOA
+    {
+        private global::CxxMapping.IMultiOperations __impl;
+
+        public MultiPOATie(global::CxxMapping.IMultiOperations impl)
+        {
+            __impl = impl;
+        }
+
+        public global::CxxMapping.IMultiOperations _delegate
+        {
+            get => __impl;
+            set => __impl = value;
+        }
+
+        public override global::CxxMapping.Base.BaseInfo multi_op(global::CxxMapping.Base.BaseInfo info) =>
+            __impl.multi_op(info);
+
+        public override int derived_op(int a, ref int b, out int c) =>
+            __impl.derived_op(a, ref b, out c);
+
+        public override void notify(string msg) =>
+            __impl.notify(msg);
+
+        public override global::CxxMapping.IBase? as_base() =>
+            __impl.as_base();
+
+        public override string other_op() =>
+            __impl.other_op();
+
+        public override int id
+        {
+            get => __impl.id;
+        }
+
+        public override string label
+        {
+            get => __impl.label;
+            set => __impl.label = value;
+        }
+
+        public override void base_op(bool fail) =>
+            __impl.base_op(fail);
+    }
+
 }
 
 namespace CxxMapping
@@ -4301,6 +4438,26 @@ namespace CxxMapping
                     throw global::Rustorb.Servants.BadOperation();
             }
         }
+    }
+
+    /// <summary>The servant of Later that delegates to an implementation of its operations.</summary>
+    public class LaterPOATie : LaterPOA
+    {
+        private global::CxxMapping.ILaterOperations __impl;
+
+        public LaterPOATie(global::CxxMapping.ILaterOperations impl)
+        {
+            __impl = impl;
+        }
+
+        public global::CxxMapping.ILaterOperations _delegate
+        {
+            get => __impl;
+            set => __impl = value;
+        }
+
+        public override global::CxxMapping.ILater? next() =>
+            __impl.next();
     }
 
 }
@@ -5096,6 +5253,80 @@ namespace CxxMapping
                     throw global::Rustorb.Servants.BadOperation();
             }
         }
+    }
+
+    /// <summary>The servant of Types that delegates to an implementation of its operations.</summary>
+    public class TypesPOATie : TypesPOA
+    {
+        private global::CxxMapping.ITypesOperations __impl;
+
+        public TypesPOATie(global::CxxMapping.ITypesOperations impl)
+        {
+            __impl = impl;
+        }
+
+        public global::CxxMapping.ITypesOperations _delegate
+        {
+            get => __impl;
+            set => __impl = value;
+        }
+
+        public override global::CxxMapping.Tree echo_tree(global::CxxMapping.Tree t) =>
+            __impl.echo_tree(t);
+
+        public override global::CxxMapping.Node echo_node(global::CxxMapping.Node n) =>
+            __impl.echo_node(n);
+
+        public override global::CxxMapping.ByBool echo_by_bool(global::CxxMapping.ByBool u) =>
+            __impl.echo_by_bool(u);
+
+        public override global::CxxMapping.ByChar echo_by_char(global::CxxMapping.ByChar u) =>
+            __impl.echo_by_char(u);
+
+        public override global::CxxMapping.ByEnum echo_by_enum(global::CxxMapping.ByEnum u) =>
+            __impl.echo_by_enum(u);
+
+        public override global::CxxMapping.ByULongLong echo_by_ulonglong(global::CxxMapping.ByULongLong u) =>
+            __impl.echo_by_ulonglong(u);
+
+        public override global::CxxMapping.WithArray echo_with_array(global::CxxMapping.WithArray u) =>
+            __impl.echo_with_array(u);
+
+        public override global::CxxMapping.Holder echo_holder(global::CxxMapping.Holder h) =>
+            __impl.echo_holder(h);
+
+        public override global::CxxMapping.Outer echo_outer(global::CxxMapping.Outer o) =>
+            __impl.echo_outer(o);
+
+        public override global::CxxMapping.Keywords echo_keywords(global::CxxMapping.Keywords k) =>
+            __impl.echo_keywords(k);
+
+        public override global::GlobalPoint echo_global(global::GlobalPoint p) =>
+            __impl.echo_global(p);
+
+        public override string echo_short_string(string s) =>
+            __impl.echo_short_string(s);
+
+        public override decimal echo_money(decimal m, ref decimal total, out decimal whole) =>
+            __impl.echo_money(m, ref total, out whole);
+
+        public override global::CxxMapping.Price echo_price(global::CxxMapping.Price p) =>
+            __impl.echo_price(p);
+
+        public override decimal echo_quad(decimal q, ref decimal twice, out decimal negated) =>
+            __impl.echo_quad(q, ref twice, out negated);
+
+        public override global::CxxMapping.Measure echo_measure(global::CxxMapping.Measure m) =>
+            __impl.echo_measure(m);
+
+        public override void fail(int code) =>
+            __impl.fail(code);
+
+        public override global::Omg.Types.ISequence<global::CxxMapping.ILater?> laters(int n) =>
+            __impl.laters(n);
+
+        public override void delete(string what) =>
+            __impl.delete(what);
     }
 
 }
