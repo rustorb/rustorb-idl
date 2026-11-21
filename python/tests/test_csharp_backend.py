@@ -146,7 +146,6 @@ class CSharpBackendTest(unittest.TestCase):
 
     def test_options(self):
         path = os.path.join(INTEROP_IDL, "InteropTest.idl")
-        self.assertEqual(cli.main(["-bcsharp", "-Wbami", "-C", OUT, path]), 2)
         self.assertEqual(cli.main(["-bcsharp", "-Wbh=.h", "-C", OUT, path]), 2)
         self.assertEqual(cli.main(["-bcs", "-C", os.path.join(OUT, "cs"), path]), 0)
 
@@ -189,6 +188,38 @@ class CSharpBackendTest(unittest.TestCase):
         self.assertIn("public abstract class Card : global::Corba.ValueBase, global::AbstractTest.INamed", a)
         self.assertIn("__out.write_abstract(__v);", a)
         self.assertIn("tk_abstract_interface", a)
+
+    def test_ami(self):
+        out = os.path.join(OUT, "ami")
+        path = os.path.join(INTEROP_IDL, "InteropTest.idl")
+        self.assertEqual(cli.main(["-bcsharp", "-Wbami", "-C", out, path]), 0)
+        echo = self.cs("InteropTest", out)
+        # The implied handler interface, on Messaging.ReplyHandler.
+        self.assertIn("public interface IAMI_EchoHandlerOperations : global::Messaging.IReplyHandlerOperations", echo)
+        self.assertIn("void divide_excep(global::Messaging.ExceptionHolder? excep_holder);", echo)
+        # sendc_ on the stub class only.
+        self.assertIn("public void sendc_divide(global::InteropTest.IAMI_EchoHandler? ami_handler, int a, int b)", echo)
+        self.assertIn('global::Rustorb.Ami.Sendc(this, "divide", ami_handler,', echo)
+        self.assertIn("public void sendc_get_counter(global::InteropTest.IAMI_EchoHandler? ami_handler)", echo)
+        self.assertNotIn("void sendc_divide(global::InteropTest.IAMI_EchoHandler? ami_handler, int a, int b);", echo)
+        # Every user exception is known to the runtime.
+        self.assertIn('global::Rustorb.UserExceptions.Register<global::InteropTest.Oops>("IDL:rustorb.org/InteropTest/Oops:1.0"', echo)
+        if DOTNET:
+            proj = os.path.join(out, "Compile.csproj")
+            with open(proj, "w") as f:
+                f.write(textwrap.dedent("""\
+                    <Project Sdk="Microsoft.NET.Sdk">
+                      <PropertyGroup>
+                        <TargetFramework>net8.0</TargetFramework>
+                        <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+                      </PropertyGroup>
+                      <ItemGroup>
+                        <ProjectReference Include="%s" />
+                      </ItemGroup>
+                    </Project>
+                    """) % RUNTIME)
+            r = subprocess.run([DOTNET, "build", proj], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0, r.stdout[-4000:] + r.stderr[-2000:])
 
     def test_unsupported(self):
         # Local interfaces (rustorb#186); the IDL 4 bitmask and bitset.

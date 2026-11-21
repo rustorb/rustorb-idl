@@ -2982,3 +2982,13 @@ namespace InteropTest
     }
 
 }
+
+internal static class __RustorbValues_InteropTest
+{
+    [global::System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void Register()
+    {
+        global::Rustorb.UserExceptions.Register<global::InteropTest.Oops>("IDL:rustorb.org/InteropTest/Oops:1.0", global::InteropTest.OopsHelper.read, global::InteropTest.OopsHelper.write);
+        global::Rustorb.UserExceptions.Register<global::InteropTest.DivideByZero>("IDL:rustorb.org/InteropTest/DivideByZero:1.0", global::InteropTest.DivideByZeroHelper.read, global::InteropTest.DivideByZeroHelper.write);
+    }
+}

@@ -8,6 +8,13 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ### Added
 
+- C#: `-bcsharp -Wbami`, callback AMI (rustorb/rustorb#186): the
+  `sendc_` operations on the stub class (not on `I<Name>`, which other
+  classes may implement), over `Rustorb.Ami.Sendc`, with the implied
+  `AMI_<Name>Handler` interfaces on the runtime's `Messaging`. Every user
+  exception is registered with the runtime (`Rustorb.UserExceptions`),
+  which raises those of `Messaging.ExceptionHolder`.
+
 - C#: valuetypes, value boxes, custom valuetypes and abstract interfaces
   in `-bcsharp` (rustorb/rustorb#186). A valuetype is the abstract class
   of IDL4 to C# 7.6 (state members as properties, private ones protected;

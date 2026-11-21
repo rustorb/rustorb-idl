@@ -5338,3 +5338,14 @@ namespace CxxMapping
         public const int REOPENED = 1;
     }
 }
+
+internal static class __RustorbValues_CxxMapping
+{
+    [global::System.Runtime.CompilerServices.ModuleInitializer]
+    internal static void Register()
+    {
+        global::Rustorb.UserExceptions.Register<global::CxxMapping.Failure>("IDL:rustorb.org/CxxMapping/Failure:1.0", global::CxxMapping.FailureHelper.read, global::CxxMapping.FailureHelper.write);
+        global::Rustorb.UserExceptions.Register<global::CxxMapping.Empty>("IDL:rustorb.org/CxxMapping/Empty:1.0", global::CxxMapping.EmptyHelper.read, global::CxxMapping.EmptyHelper.write);
+        global::Rustorb.UserExceptions.Register<global::CxxMapping.Base.BaseError>("IDL:rustorb.org/CxxMapping/Base/BaseError:1.0", global::CxxMapping.Base.BaseErrorHelper.read, global::CxxMapping.Base.BaseErrorHelper.write);
+    }
+}

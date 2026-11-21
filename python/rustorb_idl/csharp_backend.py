@@ -42,7 +42,13 @@ valuetypes are registered by a module initialiser. An abstract interface
 ``A`` is the interface ``IA`` and the stub class ``A``; each concrete
 interface also has the tie ``<Name>POATie``.
 
-Local interfaces and ``-Wbami`` are not mapped yet (rustorb#186).
+``-Wbami`` adds the ``sendc_`` operations of callback AMI to the stub
+class (as in the Java mapping: not to ``I<Name>``, which other classes may
+implement; the handlers are the implied ``AMI_<Name>Handler``
+interfaces; ``Messaging`` is the runtime's). Every user exception is
+registered with the runtime, which raises those of AMI ExceptionHolders.
+
+Local interfaces are not mapped yet (rustorb#186).
 """
 
 import os
@@ -953,6 +959,8 @@ class CSharpBackend(object):
         w()
         if exception:
             tc_fn = "Exception"
+            self.registrations.append('global::Rustorb.UserExceptions.Register<%s>("%s", %s.read, %s.write);'
+                                      % (scoped, fe.repository_id(node), self.helper(node), self.helper(node)))
         else:
             tc_fn = "Struct"
         tc = '%s.TypeCodes.%s(__id, "%s", new string[] { %s }, new %s[] { %s })' % (
@@ -1616,12 +1624,91 @@ class CSharpBackend(object):
         for m in self.op_members(node, self.all_operations(node)):
             w()
             self.stub_member(w, m)
+        if not self.is_abstract(node):
+            seen = set()
+            for n in [node] + [self.full(a) for a in self.ancestors(node)]:
+                if self.is_abstract(n):
+                    continue
+                for sendc in cxx_backend.CxxBackend.sendc_operations(self, n):
+                    if sendc[0] in seen:
+                        continue
+                    seen.add(sendc[0])
+                    w()
+                    self.sendc_method(w, n, sendc)
         if any(not (fe.is_operation(d) or fe.is_attribute(d)) for d in fe.members_of(node)):
             w()
             self.nested(w, node)
         w.dedent()
         w("}")
         w()
+
+    # -Wbami
+
+    def sendc_signature(self, node, sendc):
+        name, _, op, ins = sendc
+        d = op[6]
+        handler = self.scoped(fe.handler_of(node))
+        args = ["%s? ami_handler" % handler]
+        args += ["%s %s" % (self.cstype(t, d), self.param_name(p)) for p, t in ins]
+        return "void %s(%s)" % (self.member_name(name), ", ".join(args))
+
+    def sendc_method(self, w, node, sendc):
+        """A sendc_ operation of the stub: the arguments are copied (the
+        runtime writes them later, maybe more than once); the reply is read
+        into locals that the call of the handler passes on."""
+        _, reply, op, ins = sendc
+        opname, _, ret, params, excs, _, d = op
+        outs = [(p, t) for p, t, dr in params if dr in ("inout", "out")]
+        w("public %s" % self.sendc_signature(node, sendc))
+        w("{")
+        w.indent()
+        for p, t in ins:
+            w("var __a_%s = %s;" % (p, self.copy(t, self.param_name(p), d)))
+        results = []
+        if ret.kind != "void":
+            results.append(("__r", ret))
+        results += [("__o_" + p, t) for p, t in outs]
+        for v, t in results:
+            w("%s %s = default!;" % (self.cstype(t, d), v))
+        w('%s.Ami.Sendc(this, "%s", ami_handler,' % (RT, opname))
+        w.indent()
+        if ins:
+            w("__out =>")
+            w("{")
+            w.indent()
+            for p, t in ins:
+                self.write(w, t, "__a_" + p, 0, d)
+            w.dedent()
+            w("},")
+        else:
+            w("null,")
+        if results:
+            w("__in =>")
+            w("{")
+            w.indent()
+            for v, t in results:
+                self.read(w, t, v, 0, d)
+            w.dedent()
+            w("},")
+        else:
+            w("null,")
+        if excs:
+            w("(__id, __in) =>")
+            w("{")
+            w.indent()
+            for e in excs:
+                h = self.helper(e)
+                w("if (__id == %s.id()) return %s.read(__in);" % (h, h))
+            w("return null;")
+            w.dedent()
+            w("},")
+        else:
+            w("null,")
+        w("() => ami_handler!.%s(%s)," % (self.member_name(reply), ", ".join(v for v, _ in results)))
+        w("__h => ami_handler!.%s(__h));" % self.member_name(reply + "_excep"))
+        w.dedent()
+        w.dedent()
+        w("}")
 
     def abstract_interface(self, w, node):
         """An abstract interface A: the interface IA with the operations,
