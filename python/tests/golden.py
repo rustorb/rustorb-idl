@@ -37,6 +37,9 @@ CASES = [
     ("csharp", ["-bcsharp"], "cpp/CxxMapping.idl"),
     ("csharp", ["-bcsharp"], "CosNaming.idl"),
     ("csharp", ["-bcsharp", "-Wbdotnet_naming"], "interop/InteropTest.idl"),
+    ("c", ["-bc"], "cpp/CxxMapping.idl"),
+    ("c", ["-bc"], "CosNaming.idl"),
+    ("c", ["-bc"], "interop/InteropTest.idl"),
 ]
 
 

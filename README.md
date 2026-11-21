@@ -11,7 +11,8 @@ code for Rust (`-brust`, with the DDS type support of `-Wbdds` /
 the DDS types for rustorb-dds's C++ binding of `-Wbdds` / `-Wbdds_only`) and
 Java (`-bjava`, with the DDS types for rustorb-dds's Java binding of
 `-Wbdds` / `-Wbdds_only`) and C# (`-bcsharp`, the IDL4 to C# mapping for
-rustorb's .NET binding; `-Wbdotnet_naming` for the .NET naming scheme). With `-brust -Wbdds_only -Wbxtypes`, the
+rustorb's .NET binding; `-Wbdotnet_naming` for the .NET naming scheme) and C
+(`-bc`, the OMG C Language Mapping for rustorb's C binding, librustorb_c). With `-brust -Wbdds_only -Wbxtypes`, the
 `@DDSService` interfaces get clients and servers of DDS-RPC for rustorb-dds
 ([docs/dds-rpc.md](docs/dds-rpc.md)).
 

@@ -9,6 +9,8 @@ The options follow omniidl where they mean the same thing:
   -brust            Rust stubs and skeletons (docs/rust-mapping.md)
   -bcsharp          C# stubs and skeletons (IDL4 to C# mapping), for
                     rustorb's .NET binding (Rustorb.Corba)
+  -bc               C stubs and skeletons (OMG C mapping), for rustorb's C
+                    binding (librustorb_c)
   -I DIR            look for #include files in DIR
   -D NAME[=VALUE]   define a preprocessor macro
   -C DIR            write the output under DIR (default: the current directory)
@@ -63,6 +65,7 @@ import os
 import sys
 
 from . import __version__
+from . import c_backend
 from . import csharp_backend
 from . import cxx_backend
 from . import cxx_dds
@@ -86,7 +89,7 @@ def parse_args(argv):
         add_help=True,
     )
     ap.add_argument(
-        "-b", dest="backend", required=True, metavar="BACKEND", help="the backend: python, c++11, java, rust or csharp"
+        "-b", dest="backend", required=True, metavar="BACKEND", help="the backend: python, c++11, java, rust, csharp or c"
     )
     ap.add_argument("-I", dest="include", action="append", default=[], metavar="DIR")
     ap.add_argument("-D", dest="define", action="append", default=[], metavar="NAME[=VALUE]")
@@ -119,9 +122,11 @@ def main(argv=None):
         backend, options = rust_backend, rust_backend.Options()
     elif args.backend in ("csharp", "cs"):
         backend, options = csharp_backend, csharp_backend.Options()
+    elif args.backend == "c":
+        backend, options = c_backend, c_backend.Options()
     else:
         sys.stderr.write(
-            "rustorb-idl: unknown backend %r (python, c++11, java, rust and csharp are available)\n" % args.backend
+            "rustorb-idl: unknown backend %r (python, c++11, java, rust, csharp and c are available)\n" % args.backend
         )
         return 2
     ami = False
@@ -132,6 +137,9 @@ def main(argv=None):
                 return 2
             if backend is csharp_backend:
                 sys.stderr.write("rustorb-idl: -Wbami is not for csharp yet (rustorb#186)\n")
+                return 2
+            if backend is c_backend:
+                sys.stderr.write("rustorb-idl: -Wbami is not for c yet (rustorb#187)\n")
                 return 2
             ami = True
         elif backend is python_backend and opt.startswith("bglobal="):
@@ -221,6 +229,8 @@ def main(argv=None):
                 generator = rust_backend.RustBackend(spec, options)
             elif backend is csharp_backend:
                 generator = csharp_backend.CSharpBackend(spec, options)
+            elif backend is c_backend:
+                generator = c_backend.CBackend(spec, options)
             else:
                 generator = cxx_backend.CxxBackend(spec, options)
             os.makedirs(args.outdir, exist_ok=True)

@@ -8,6 +8,19 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ### Added
 
+- C: `-bc` writes the OMG C Language Mapping 1.0 (formal/99-07-35) for
+  rustorb's C binding (librustorb_c, rustorb/rustorb#180, #181): a
+  `<File>.h` and a `<File>.c` per IDL file with the types (structs, unions
+  as `_d` and `_u`, enums, sequences with `__alloc` and `_allocbuf`,
+  arrays with their `_slice`, `CORBA_fixed_<d>_<s>`), constants as macros,
+  `ex_` repository ids and `TC_` TypeCodes, the stubs (`<I>_<op>`,
+  `<I>__get_<attr>`, `<I>__set_<attr>`), and the skeletons (`POA_<I>`,
+  its epv and vepv, `POA_<I>__init` and `__fini`). The `.c` file holds a
+  descriptor of each type that librustorb_c's generic marshalling, freeing
+  and copying use. The headers also compile as C++. Valuetypes, abstract
+  and local interfaces, bitmasks, bitsets and `-Wbami` are errors for now
+  (rustorb/rustorb#187).
+
 - C#: `-bcsharp` (also `-bcs`) writes the IDL4 to C# mapping (OMG
   formal/21-07-01) for rustorb's .NET binding (`Rustorb.Corba`,
   rustorb/rustorb#177): one `<File>.cs` per IDL file with the
