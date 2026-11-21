@@ -8,6 +8,18 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ### Added
 
+- C#: `-bcsharp` (also `-bcs`) writes the IDL4 to C# mapping (OMG
+  formal/21-07-01) for rustorb's .NET binding (`Rustorb.Corba`,
+  rustorb/rustorb#177): one `<File>.cs` per IDL file with the
+  `I<Name>Operations` and `I<Name>` interfaces, the stub class, the
+  `<Name>POA` skeleton and the Helper of each interface, classes for
+  structs, unions and exceptions (`IEquatable`, the default, copy and
+  all-values constructors), enums, constants in `Constants` and Helpers
+  with the TypeCode, Any insertion and extraction, and the marshalling.
+  `-Wbdotnet_naming` uses the .NET naming scheme (PascalCase, 7.1.1.2).
+  Valuetypes, abstract and local interfaces, bitmasks, bitsets and
+  `-Wbami` are errors for now (rustorb/rustorb#186, rustorb/rustorb#178).
+
 - Rust: with `-Wbdds_only -Wbxtypes`, the interfaces marked `@DDSService`
   get the function-call style of DDS-RPC 1.0 for rustorb-dds: the implied
   IDL of the Enhanced Service Mapping (the In, Out and Result structs of

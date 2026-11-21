@@ -10,7 +10,8 @@ code for Rust (`-brust`, with the DDS type support of `-Wbdds` /
 `rustorb_dds` package of `-Wbdds` / `-Wbdds_only`), C++11 (`-bc++11`, with
 the DDS types for rustorb-dds's C++ binding of `-Wbdds` / `-Wbdds_only`) and
 Java (`-bjava`, with the DDS types for rustorb-dds's Java binding of
-`-Wbdds` / `-Wbdds_only`). With `-brust -Wbdds_only -Wbxtypes`, the
+`-Wbdds` / `-Wbdds_only`) and C# (`-bcsharp`, the IDL4 to C# mapping for
+rustorb's .NET binding; `-Wbdotnet_naming` for the .NET naming scheme). With `-brust -Wbdds_only -Wbxtypes`, the
 `@DDSService` interfaces get clients and servers of DDS-RPC for rustorb-dds
 ([docs/dds-rpc.md](docs/dds-rpc.md)).
 
