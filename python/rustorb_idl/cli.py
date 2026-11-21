@@ -11,6 +11,8 @@ The options follow omniidl where they mean the same thing:
                     rustorb's .NET binding (Rustorb.Corba)
   -bc               C stubs and skeletons (OMG C mapping), for rustorb's C
                     binding (librustorb_c)
+  -bruby            Ruby stubs and skeletons (OMG Ruby mapping, FooC.rb and
+                    FooS.rb), for rustorb's Ruby binding (the rustorb gem)
   -I DIR            look for #include files in DIR
   -D NAME[=VALUE]   define a preprocessor macro
   -C DIR            write the output under DIR (default: the current directory)
@@ -74,6 +76,7 @@ from . import frontend
 from . import java_backend
 from . import python_backend
 from . import python_dds
+from . import ruby_backend
 from . import rust_backend
 
 
@@ -89,7 +92,7 @@ def parse_args(argv):
         add_help=True,
     )
     ap.add_argument(
-        "-b", dest="backend", required=True, metavar="BACKEND", help="the backend: python, c++11, java, rust, csharp or c"
+        "-b", dest="backend", required=True, metavar="BACKEND", help="the backend: python, c++11, java, rust, csharp, c or ruby"
     )
     ap.add_argument("-I", dest="include", action="append", default=[], metavar="DIR")
     ap.add_argument("-D", dest="define", action="append", default=[], metavar="NAME[=VALUE]")
@@ -124,9 +127,11 @@ def main(argv=None):
         backend, options = csharp_backend, csharp_backend.Options()
     elif args.backend == "c":
         backend, options = c_backend, c_backend.Options()
+    elif args.backend in ("ruby", "rb"):
+        backend, options = ruby_backend, ruby_backend.Options()
     else:
         sys.stderr.write(
-            "rustorb-idl: unknown backend %r (python, c++11, java, rust, csharp and c are available)\n" % args.backend
+            "rustorb-idl: unknown backend %r (python, c++11, java, rust, csharp, c and ruby are available)\n" % args.backend
         )
         return 2
     ami = False
@@ -140,6 +145,9 @@ def main(argv=None):
                 return 2
             if backend is c_backend:
                 sys.stderr.write("rustorb-idl: -Wbami is not for c yet (rustorb#187)\n")
+                return 2
+            if backend is ruby_backend:
+                sys.stderr.write("rustorb-idl: -Wbami is not for ruby yet (rustorb#188)\n")
                 return 2
             ami = True
         elif backend is python_backend and opt.startswith("bglobal="):
@@ -231,6 +239,8 @@ def main(argv=None):
                 generator = csharp_backend.CSharpBackend(spec, options)
             elif backend is c_backend:
                 generator = c_backend.CBackend(spec, options)
+            elif backend is ruby_backend:
+                generator = ruby_backend.RubyBackend(spec, options)
             else:
                 generator = cxx_backend.CxxBackend(spec, options)
             os.makedirs(args.outdir, exist_ok=True)

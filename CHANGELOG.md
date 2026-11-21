@@ -8,6 +8,21 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ### Added
 
+- Ruby: `-bruby` (also `-brb`) writes the OMG Ruby Language Mapping (RCLM
+  1.2, formal/2013-04-05) for rustorb's Ruby binding (the `rustorb` gem,
+  rustorb/rustorb#183, #184): `<File>C.rb` with the types (structs, unions
+  and exceptions as classes on `CORBA::Portable::Struct`,
+  `CORBA::Portable::Union` and `CORBA::UserException`, enums as modules of
+  Integer constants, typedefs, constants, `_tc` on each, made when first
+  used so that recursive types need nothing more) and the stubs (a module
+  per interface with `_narrow`, a method per operation and `x` / `x=` per
+  attribute, out and inout values returned after the result), and
+  `<File>S.rb` with the skeletons (`POA::<Module>::<I>`). Names that must
+  be Ruby constants start with a capital; keywords and the methods every
+  object has get an `r_` prefix. Valuetypes, abstract and local
+  interfaces, bitmasks, bitsets and `-Wbami` are errors for now
+  (rustorb/rustorb#188).
+
 - C: `-bc` writes the OMG C Language Mapping 1.0 (formal/99-07-35) for
   rustorb's C binding (librustorb_c, rustorb/rustorb#180, #181): a
   `<File>.h` and a `<File>.c` per IDL file with the types (structs, unions
