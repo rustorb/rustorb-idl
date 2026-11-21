@@ -77,9 +77,12 @@ rustorb/rustorb; see its CHANGELOG.md for them.
   attribute, out and inout values returned after the result), and
   `<File>S.rb` with the skeletons (`POA::<Module>::<I>`). Names that must
   be Ruby constants start with a capital; keywords and the methods every
-  object has get an `r_` prefix. Valuetypes, abstract and local
-  interfaces, bitmasks, bitsets and `-Wbami` are errors for now
-  (rustorb/rustorb#188).
+  object has get an `r_` prefix. IDL 4: `int8` (an Integer sent as an
+  octet), bitmasks (modules of `1 << position` constants), bitsets
+  (`Rustorb::Bitset` classes sent as their holder integer), `@default`
+  (`DEFAULTS`) and `@range` / `@min` / `@max` (`RANGES`, checked when a
+  struct is sent or received). Valuetypes, abstract and local interfaces
+  and `-Wbami` are errors for now (rustorb/rustorb#188).
 
 - C: `-bc` writes the OMG C Language Mapping 1.0 (formal/99-07-35) for
   rustorb's C binding (librustorb_c, rustorb/rustorb#180, #181): a

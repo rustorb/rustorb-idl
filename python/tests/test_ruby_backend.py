@@ -31,9 +31,10 @@ IDLS = [
     os.path.join(INTEROP_IDL, "AnyTest.idl"),
     os.path.join(INTEROP_IDL, "PoaProbe.idl"),
     os.path.join(CPP_IDL, "CxxMapping.idl"),
+    os.path.join(CPP_IDL, "Idl4.idl"),
     os.path.join(TEST_IDL, "CosNaming.idl"),
 ]
-NAMES = ("InteropTest", "AnyTest", "PoaProbe", "CxxMapping", "CosNaming")
+NAMES = ("InteropTest", "AnyTest", "PoaProbe", "CxxMapping", "Idl4", "CosNaming")
 
 
 def tearDownModule():
@@ -163,6 +164,18 @@ class RubyBackendTest(unittest.TestCase):
         self.assertIn("::CxxMapping::Outer::Inner._tc", s)
         self.assertIn("      OFF = 1\n", s)
 
+    def test_idl4(self):
+        s = self.stubs("Idl4")
+        self.assertIn("SMALLEST = -128", s)
+        self.assertIn("    WRITE = 1 << 3\n", s)
+        self.assertIn("def self._tc = ::CORBA._tc_ulonglong", s)
+        self.assertIn("class Header < ::Rustorb::Bitset", s)
+        self.assertIn('["delta", 3, 5, :signed].freeze', s)
+        self.assertIn("::CORBA::TypeCode._bitset_tc(::CORBA::TK_USHORT, self)", s)
+        self.assertIn('DEFAULTS = { "retries" => 7, "enabled" => true, "ratio" => 2.5 }.freeze', s)
+        self.assertIn('RANGES = { "level" => [0, 10].freeze, "step" => [1, 5].freeze }.freeze', s)
+        self.assertIn('["offset", ::CORBA._tc_int8]', s)
+
     def test_lower_case_names(self):
         path = write_idl("lower.idl", """\
             module lower {
@@ -219,7 +232,8 @@ class RubyBackendTest(unittest.TestCase):
         self.unsupported("valuetype V { public long x; };\n", "valuetypes are not supported by the Ruby backend")
         self.unsupported("abstract interface A { void f(); };\n", "abstract interfaces are not supported")
         self.unsupported("local interface L { void f(); };\n", "local interfaces are not supported")
-        self.unsupported("struct S { int8 x; };\n", "int8 is not supported by the Ruby backend")
+        self.unsupported("bitset B { bitfield<2> a; };\nbitset C : B { bitfield<2> b; };\n",
+                         "bitset inheritance is not supported")
         self.unsupported("interface I { void f(); };\n", "-Wbami is not for ruby", ["-Wbami"])
 
 

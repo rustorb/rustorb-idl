@@ -21,9 +21,14 @@ Apache-2.0) implements it:
   are Ruby keywords or methods every object needs get an ``r_`` prefix.
 
 TypeCodes are made when first used, so the order of the definitions and
-recursive types need nothing from the generated code. Valuetypes,
-abstract and local interfaces, ``int8`` and the IDL 4 bitmask and bitset
-are errors (rustorb#188).
+recursive types need nothing from the generated code. IDL 4 (rustorb):
+``int8`` is an Integer sent as an octet; a bitmask is a module of
+``1 << position`` constants (values are Integers); a bitset is a
+``Rustorb::Bitset`` class with an accessor per bitfield, sent as the
+unsigned integer that holds its bits; ``@default`` gives the value of a
+struct member that ``new`` does not get and ``@range`` / ``@min`` /
+``@max`` are checked when a struct is sent or received. Valuetypes and
+abstract and local interfaces are errors (rustorb#188).
 """
 
 import math
@@ -80,7 +85,23 @@ TC_BASIC = {
     "TypeCode": "_tc_TypeCode",
 }
 
-INT_KINDS = ("short", "long", "ushort", "ulong", "longlong", "ulonglong", "octet")
+INT_KINDS = ("short", "long", "ushort", "ulong", "longlong", "ulonglong", "octet", "int8")
+
+
+def holder_tk(bits):
+    """The TCKind of the unsigned integer that holds ``bits`` bits, as a
+    bitmask or a bitset is sent."""
+    if bits <= 8:
+        return "TK_OCTET"
+    if bits <= 16:
+        return "TK_USHORT"
+    if bits <= 32:
+        return "TK_ULONG"
+    return "TK_ULONGLONG"
+
+
+HOLDER_TC = {"TK_OCTET": "_tc_octet", "TK_USHORT": "_tc_ushort", "TK_ULONG": "_tc_ulong",
+             "TK_ULONGLONG": "_tc_ulonglong"}
 
 
 class Writer(cxx_backend.Writer):
@@ -203,7 +224,11 @@ class RubyBackend(object):
             n = self.full(t.node)
             self.check_node(n, where)
             return self.path(n) + "._tc"
-        if k in ("int8", "bitmask", "bitset", "Principal"):
+        if k == "int8":
+            return "::CORBA._tc_int8"
+        if k in ("bitmask", "bitset"):
+            return self.path(t.node) + "._tc"
+        if k == "Principal":
             raise fe.GeneratorError("%s is not supported by the Ruby backend (rustorb#188)" % k, where)
         raise fe.GeneratorError("no TypeCode for %r" % t, where)
 
@@ -341,10 +366,10 @@ class RubyBackend(object):
             self.w()
         elif fe.is_valuetype(node):
             raise fe.GeneratorError("valuetypes are not supported by the Ruby backend yet (rustorb#188)", node)
-        elif fe.is_bitmask(node) or fe.is_bitset(node):
-            raise fe.GeneratorError(
-                "the IDL 4 %s is not supported by the Ruby backend (rustorb#188)" % fe.kind_name(node), node
-            )
+        elif fe.is_bitmask(node):
+            self.bitmask(node)
+        elif fe.is_bitset(node):
+            self.bitset(node)
         else:
             raise fe.GeneratorError(
                 "%s definitions are not supported by the Ruby backend" % fe.kind_name(node), node
@@ -394,6 +419,53 @@ class RubyBackend(object):
             w("%s = %d" % (const_name(n), i))
         w()
 
+    # IDL 4 bitmasks and bitsets
+
+    def bitmask(self, node):
+        w = self.w
+        w("module %s" % const_name(node.name))
+        w.indent()
+        w("BIT_BOUND = %d" % node.bit_bound)
+        for v in node.values:
+            w("%s = 1 << %d" % (const_name(v.name), v.position))
+        w()
+        w("def self._tc = ::CORBA.%s" % HOLDER_TC[holder_tk(node.bit_bound)])
+        w.dedent()
+        w("end")
+        w()
+
+    def bitset(self, node):
+        w = self.w
+        if node.base is not None:
+            raise fe.GeneratorError("bitset inheritance is not supported", node)
+        fields = []
+        for f in node.bitfields:
+            if not f.name:
+                continue
+            kind = cxx_backend.CxxBackend.bitfield_type(self, f, node)
+            if kind == "boolean":
+                how = "boolean"
+            elif cxx_backend.INT_RANGES[kind][0] < 0:
+                how = "signed"
+            else:
+                how = "unsigned"
+            fields.append((method_name(f.name), f.position, f.bits, how))
+        name = const_name(node.name)
+        w("class %s < ::Rustorb::Bitset" % name)
+        w.indent()
+        w("FIELDS = [%s].freeze" % ", ".join('["%s", %d, %d, :%s].freeze' % f for f in fields))
+        if fields:
+            w("attr_accessor %s" % ", ".join(":" + f[0] for f in fields))
+        w()
+        w("def self._tc")
+        w.indent()
+        w("@_tc ||= ::CORBA::TypeCode._bitset_tc(::CORBA::%s, self)" % holder_tk(max(node.bit_size, 1)))
+        w.dedent()
+        w("end")
+        w.dedent()
+        w("end")
+        w()
+
     # typedefs
 
     def typedef(self, node):
@@ -433,6 +505,20 @@ class RubyBackend(object):
         w("MEMBERS = [%s].freeze" % ", ".join('"%s"' % method_name(m) for m, _, _ in members))
         if members:
             w("attr_accessor %s" % ", ".join(":" + method_name(m) for m, _, _ in members))
+        if not exception:
+            defaults = [(method_name(m), self.member_default(d, t)) for m, t, d in members]
+            defaults = [(m, v) for m, v in defaults if v is not None]
+            if defaults:
+                w("DEFAULTS = { %s }.freeze" % ", ".join('"%s" => %s' % mv for mv in defaults))
+            ranges = [(method_name(m), cxx_backend.CxxBackend.member_range(self, d, t)) for m, t, d in members]
+            ranges = [(m, r) for m, r in ranges if r is not None]
+            if ranges:
+                w(
+                    "RANGES = { %s }.freeze"
+                    % ", ".join(
+                        '"%s" => [%s, %s].freeze' % (m, lo or "nil", hi or "nil") for m, (lo, hi) in ranges
+                    )
+                )
         w()
         self.tc_method(
             node,
@@ -448,6 +534,21 @@ class RubyBackend(object):
         w("end")
         w("::Rustorb.register_type(%s)" % name)
         w()
+
+    def member_default(self, m, t):
+        """The Ruby value of a member's ``@default``, or None."""
+        a = fe.annotation(m, "default")
+        if a is None:
+            return None
+        r = t.resolved()
+        if r.kind not in INT_KINDS and r.kind not in ("boolean", "float", "double", "string"):
+            raise fe.GeneratorError("@default of a %s member is not supported" % r.kind, m)
+        value = a.value
+        if r.kind == "boolean":
+            value = str(value).upper() == "TRUE"
+        elif r.kind == "string":
+            value = str(value).strip('"')
+        return self.literal(value, r)
 
     def nested_inside(self, node):
         inner = [
