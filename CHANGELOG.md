@@ -8,6 +8,20 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ### Added
 
+- C#: local interfaces and the IDL 4 bitmask, bitset, `@default` and
+  `@range` / `@min` / `@max` in `-bcsharp` (rustorb/rustorb#186). A local
+  interface is `I<Name>` and an abstract class `<Name>` on
+  `Corba.LocalObject` with every operation and attribute abstract, to
+  derive implementations from; its helper's `write` and `read` raise
+  `MARSHAL` (minor 4). A bitmask is a `[Flags]` enum on the unsigned type
+  of its `@bit_bound`, a bitset a struct of bitfield properties; both are
+  sent, as in the C++ mapping, as the unsigned integer that holds their
+  bits, with its TypeCode. `@default` sets a member's initial value;
+  `@range` is checked when a struct is sent (`BAD_PARAM`) and read.
+  `int8` now has the TypeCode of octet, as in the C++ mapping, instead of
+  being an error where a TypeCode is needed. Test IDL:
+  `tests/idl/LocalTest.idl`.
+
 - C#: `-bcsharp -Wbami`, callback AMI (rustorb/rustorb#186): the
   `sendc_` operations on the stub class (not on `I<Name>`, which other
   classes may implement), over `Rustorb.Ami.Sendc`, with the implied
