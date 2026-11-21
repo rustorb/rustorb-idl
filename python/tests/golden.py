@@ -34,6 +34,12 @@ CASES = [
     ("python", ["-bpython", "-Wbami"], "Ami.idl"),
     ("c++11", ["-bc++11", "-Wbami"], "Ami.idl"),
     ("java", ["-bjava", "-Wbami"], "Ami.idl"),
+    ("csharp", ["-bcsharp"], "cpp/CxxMapping.idl"),
+    ("csharp", ["-bcsharp"], "CosNaming.idl"),
+    ("csharp", ["-bcsharp", "-Wbdotnet_naming"], "interop/InteropTest.idl"),
+    ("c", ["-bc"], "cpp/CxxMapping.idl"),
+    ("c", ["-bc"], "CosNaming.idl"),
+    ("c", ["-bc"], "interop/InteropTest.idl"),
 ]
 
 

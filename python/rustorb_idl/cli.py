@@ -7,6 +7,10 @@ The options follow omniidl where they mean the same thing:
                     -bcxx11
   -bjava            Java stubs and skeletons (IDL to Java mapping)
   -brust            Rust stubs and skeletons (docs/rust-mapping.md)
+  -bcsharp          C# stubs and skeletons (IDL4 to C# mapping), for
+                    rustorb's .NET binding (Rustorb.Corba)
+  -bc               C stubs and skeletons (OMG C mapping), for rustorb's C
+                    binding (librustorb_c)
   -I DIR            look for #include files in DIR
   -D NAME[=VALUE]   define a preprocessor macro
   -C DIR            write the output under DIR (default: the current directory)
@@ -24,6 +28,9 @@ The options follow omniidl where they mean the same thing:
                     the Rust path PATH instead of writing them (rust)
   -Wbcore=PATH      the path of rustorb-core (rust, default ::rustorb_core)
   -Wbno_rustfmt     do not pass the output through rustfmt (rust)
+  -Wbdotnet_naming  the .NET naming scheme of IDL4 to C# 7.1.1.2 (PascalCase
+                    types and members, I prefix on interfaces) instead of the
+                    IDL naming scheme (csharp)
   -Wbdds            also write the DDS type support of structs, unions, enums
                     and bitmasks (rust: uses rustorb-typesupport; python:
                     Foo_dds.py, for the rustorb_dds package; c++11:
@@ -58,6 +65,8 @@ import os
 import sys
 
 from . import __version__
+from . import c_backend
+from . import csharp_backend
 from . import cxx_backend
 from . import cxx_dds
 from . import java_dds
@@ -80,7 +89,7 @@ def parse_args(argv):
         add_help=True,
     )
     ap.add_argument(
-        "-b", dest="backend", required=True, metavar="BACKEND", help="the backend: python, c++11, java or rust"
+        "-b", dest="backend", required=True, metavar="BACKEND", help="the backend: python, c++11, java, rust, csharp or c"
     )
     ap.add_argument("-I", dest="include", action="append", default=[], metavar="DIR")
     ap.add_argument("-D", dest="define", action="append", default=[], metavar="NAME[=VALUE]")
@@ -111,9 +120,13 @@ def main(argv=None):
         backend, options = java_backend, java_backend.Options()
     elif args.backend == "rust":
         backend, options = rust_backend, rust_backend.Options()
+    elif args.backend in ("csharp", "cs"):
+        backend, options = csharp_backend, csharp_backend.Options()
+    elif args.backend == "c":
+        backend, options = c_backend, c_backend.Options()
     else:
         sys.stderr.write(
-            "rustorb-idl: unknown backend %r (python, c++11, java and rust are available)\n" % args.backend
+            "rustorb-idl: unknown backend %r (python, c++11, java, rust, csharp and c are available)\n" % args.backend
         )
         return 2
     ami = False
@@ -121,6 +134,12 @@ def main(argv=None):
         if opt == "bami":
             if backend is rust_backend:
                 sys.stderr.write("rustorb-idl: -Wbami is not for rust: use the op_async methods of the stubs\n")
+                return 2
+            if backend is csharp_backend:
+                sys.stderr.write("rustorb-idl: -Wbami is not for csharp yet (rustorb#186)\n")
+                return 2
+            if backend is c_backend:
+                sys.stderr.write("rustorb-idl: -Wbami is not for c yet (rustorb#187)\n")
                 return 2
             ami = True
         elif backend is python_backend and opt.startswith("bglobal="):
@@ -147,6 +166,8 @@ def main(argv=None):
             options.rustorb_dds = opt[len("brustorb_dds=") :]
         elif backend is rust_backend and opt.startswith("bcore="):
             options.core = opt[len("bcore=") :]
+        elif backend is csharp_backend and opt == "bdotnet_naming":
+            options.dotnet_naming = True
         elif backend is rust_backend and opt == "bno_rustfmt":
             options.rustfmt = False
         elif backend in (rust_backend, python_backend, cxx_backend, java_backend) and opt == "bdds":
@@ -206,6 +227,10 @@ def main(argv=None):
                 generator = java_backend.JavaBackend(spec, options)
             elif backend is rust_backend:
                 generator = rust_backend.RustBackend(spec, options)
+            elif backend is csharp_backend:
+                generator = csharp_backend.CSharpBackend(spec, options)
+            elif backend is c_backend:
+                generator = c_backend.CBackend(spec, options)
             else:
                 generator = cxx_backend.CxxBackend(spec, options)
             os.makedirs(args.outdir, exist_ok=True)

@@ -54,6 +54,9 @@ class GoldenTest(unittest.TestCase):
     def test_java(self):
         self.check("java")
 
+    def test_csharp(self):
+        self.check("csharp")
+
 
 if __name__ == "__main__":
     unittest.main()
