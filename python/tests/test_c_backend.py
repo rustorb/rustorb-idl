@@ -40,8 +40,9 @@ IDLS = [
     os.path.join(CPP_IDL, "CxxMapping.idl"),
     os.path.join(TEST_IDL, "CosNaming.idl"),
     os.path.join(TEST_IDL, "LocalTest.idl"),
+    os.path.join(CPP_IDL, "Idl4.idl"),
 ]
-NAMES = ("InteropTest", "AnyTest", "PoaProbe", "CxxMapping", "CosNaming", "LocalTest")
+NAMES = ("InteropTest", "AnyTest", "PoaProbe", "CxxMapping", "CosNaming", "LocalTest", "Idl4")
 
 
 def tearDownModule():
@@ -204,13 +205,33 @@ class CBackendTest(unittest.TestCase):
             )
             self.assertEqual(r.returncode, 0, r.stderr[-4000:])
 
+    def test_idl4(self):
+        # int8, bitmask and bitset: the integer that holds the bits, with
+        # constants and field macros (rustorb#187).
+        h = read(os.path.join(self.outdir, "Idl4.h"))
+        self.assertIn("#define Idl4_SMALLEST ((CORBA_int8)-128)", h)
+        self.assertIn("typedef CORBA_octet Idl4_Flags;", h)
+        self.assertIn("#define Idl4_Flags__desc CORBA_octet__desc", h)
+        self.assertIn("#define TC_Idl4_Flags TC_octet", h)
+        self.assertIn("#define Idl4_WRITE ((Idl4_Flags)(1U << 3))", h)
+        self.assertIn("typedef CORBA_unsigned_long_long Idl4_Wide;", h)
+        self.assertIn("#define Idl4_HIGH ((Idl4_Wide)(1ULL << 39))", h)
+        self.assertIn("typedef CORBA_unsigned_short Idl4_Header;", h)
+        self.assertIn("#define Idl4_Header_kind(v) ((CORBA_octet)", h)
+        self.assertIn("#define Idl4_Header_set_last(p, x)", h)
+        # Signed bitfields are sign-extended.
+        self.assertIn("#define Idl4_Header_delta(v) ((CORBA_short)(CORBA_long_long)", h)
+        self.assertIn("  CORBA_int8 offset;", h)
+        self.assertIn("RUSTORB_C_SEQUENCE(CORBA_sequence_int8, CORBA_int8);", h)
+
     def test_unsupported(self):
-        # rustorb#187: valuetypes, abstract interfaces; and the IDL 4
-        # bitmask and bitset.
+        # Valuetypes and abstract interfaces have no C mapping; bitset
+        # inheritance is not supported.
         cases = {
             "valuetype": "module U { valuetype V { public long x; }; };",
             "abstract": "module U { abstract interface A { void a(); }; };",
-            "bitmask": "module U { bitmask B { X, Y }; };",
+            "bitset_base": "module U { bitset A { bitfield<2> a; }; "
+                           "bitset B : A { bitfield<2> b; }; };",
         }
         for name, text in cases.items():
             with self.subTest(name):

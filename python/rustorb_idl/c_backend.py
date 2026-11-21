@@ -38,8 +38,13 @@ values>, ev)``, over ``rustorb_c_sendc``. ``Messaging`` is the runtime's
 ``<rustorb/messaging.h>``: ``Messaging::ExceptionHolder`` (a valuetype) is
 the struct ``Messaging_ExceptionHolder``, passed as an in struct.
 
-Other valuetypes, abstract interfaces, ``int8`` and the IDL 4 bitmask and
-bitset have no C mapping and are errors (rustorb#187).
+IDL 4 (rustorb#187): ``int8`` is ``CORBA_int8``, sent and typed as an
+octet. A bitmask or a bitset is the unsigned integer that holds its bits
+(as it is sent, and its TypeCode): a bitmask's values are constants, a
+bitset's fields macros ``<Name>_<field>(v)`` and ``<Name>_set_<field>(p,
+x)``. ``@default`` and ``@range`` are ignored.
+
+Other valuetypes and abstract interfaces have no C mapping and are errors.
 """
 
 import os
@@ -84,6 +89,8 @@ BASIC = {
     "float": "CORBA_float",
     "double": "CORBA_double",
     "longdouble": "CORBA_long_double",
+    # IDL 4 int8: sent and typed as an octet (as in the C++ mapping).
+    "int8": "CORBA_int8",
 }
 
 # The names of element types in CORBA_sequence_<name> (1.11).
@@ -101,6 +108,7 @@ SEQ_NAMES = {
     "float": "float",
     "double": "double",
     "longdouble": "long_double",
+    "int8": "int8",
     "string": "string",
     "wstring": "wstring",
     "any": "any",
@@ -238,8 +246,10 @@ class CBackend(object):
             n = self.full(t.node)
             self.check_node(n, where)
             return self.cname(n)
-        if k in ("int8", "bitmask", "bitset", "Principal"):
-            raise fe.GeneratorError("%s has no C mapping (rustorb#187)" % k, where)
+        if k in ("bitmask", "bitset"):
+            return self.cname(t.node)
+        if k == "Principal":
+            raise fe.GeneratorError("Principal has no C mapping", where)
         raise fe.GeneratorError("no C type for %r" % t, where)
 
     def seq_elem_name(self, t, where):
@@ -295,7 +305,7 @@ class CBackend(object):
         any, array, vararray."""
         r = t.resolved()
         k = r.kind
-        if k in BASIC:
+        if k in BASIC or k in ("bitmask", "bitset"):
             return "basic"
         if k in ("Object", "TypeCode"):
             return "objref"
@@ -409,6 +419,8 @@ class CBackend(object):
                 "CORBA_tk_fixed, sizeof(CORBA_fixed_%d_%d), NULL, NULL, NULL, 0, 0, NULL, NULL, "
                 "-1, %d, %d" % (t.digits, t.scale, t.digits, t.scale),
             )
+        if k in ("bitmask", "bitset"):
+            return "&%s__desc" % self.cname(t.node)
         if k == "named":
             n = self.full(t.node)
             self.check_node(n, where)
@@ -658,10 +670,10 @@ class CBackend(object):
             pass
         elif fe.is_valuetype(node):
             raise fe.GeneratorError("valuetypes have no C mapping (rustorb#187)", node)
-        elif fe.is_bitmask(node) or fe.is_bitset(node):
-            raise fe.GeneratorError(
-                "the IDL 4 %s has no C mapping (rustorb#187)" % fe.kind_name(node), node
-            )
+        elif fe.is_bitmask(node):
+            self.bitmask(h, node)
+        elif fe.is_bitset(node):
+            self.bitset(h, node)
         else:
             raise fe.GeneratorError(
                 "%s definitions are not supported by the C backend" % fe.kind_name(node), node
@@ -706,6 +718,60 @@ class CBackend(object):
             "NULL, _rustorb_e_%s, -1, 0, 0, &_rustorb_c_%s};"
             % (name, name, fe.repository_id(node), node.name, len(values), name, name)
         )
+
+    # IDL 4 bitmasks and bitsets. The C mapping has none; as in the C++
+    # mapping they are sent as the unsigned integer that holds their bits,
+    # whose TypeCode is theirs too. In C the type is that integer: C
+    # bit-fields have no portable layout, so a bitset's fields are read and
+    # written with macros on the value as it is sent.
+
+    def holder(self, node):
+        bits = node.bit_bound if fe.is_bitmask(node) else max(node.bit_size, 1)
+        return cxx_backend.holder_type(bits).replace("uint8_t", "octet").replace(
+            "uint16_t", "ushort").replace("uint32_t", "ulong").replace("uint64_t", "ulonglong")
+
+    def holder_alias(self, h, node):
+        name = self.cname(node)
+        u = self.holder(node)
+        h()
+        h("typedef %s %s;" % (BASIC[u], name))
+        h("#define %s__desc %s__desc" % (name, BASIC[u]))
+        h("#define TC_%s TC_%s" % (name, u))
+        return name, u
+
+    def bitmask(self, h, node):
+        name, u = self.holder_alias(h, node)
+        suffix = "ULL" if u == "ulonglong" else "U"
+        for v in node.values:
+            h("#define %s ((%s)(1%s << %d))" % (
+                self.enumerator(node, v.name), name, suffix, v.position))
+
+    def bitset(self, h, node):
+        if node.base is not None:
+            raise fe.GeneratorError("bitset inheritance is not supported", node)
+        name, u = self.holder_alias(h, node)
+        for f in node.bitfields:
+            if not f.name:
+                continue
+            kind = fe.BASIC.get(" ".join(str(f.type).split()))
+            if kind not in INT_RANGES and kind != "boolean":
+                raise fe.GeneratorError("a bitfield of %s is not supported" % f.type, node)
+            ft = BASIC[kind]
+            mask = "0x%XULL" % ((1 << f.bits) - 1)
+            field = "(((CORBA_unsigned_long_long)(v) >> %d) & %s)" % (f.position, mask)
+            if kind == "boolean":
+                get = "((CORBA_boolean)(%s != 0))" % field
+            elif kind in ("short", "long", "longlong", "int8"):
+                # A signed bitfield: sign-extend its top bit.
+                top = "0x%XULL" % (1 << (f.bits - 1))
+                get = "((%s)(CORBA_long_long)((%s ^ %s) - %s))" % (ft, field, top, top)
+            else:
+                get = "((%s)%s)" % (ft, field)
+            h("/* %s: %d bit%s from bit %d. */" % (f.name, f.bits, "" if f.bits == 1 else "s", f.position))
+            h("#define %s_%s(v) %s" % (name, f.name, get))
+            h("#define %s_set_%s(p, x) (*(p) = (%s)((*(p) & ~(%s << %d)) | "
+              "(((CORBA_unsigned_long_long)(x) & %s) << %d)))" % (
+                  name, f.name, name, mask, f.position, mask, f.position))
 
     # typedefs
 

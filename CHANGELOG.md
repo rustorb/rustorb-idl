@@ -8,6 +8,14 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ### Added
 
+- C: IDL 4 `int8`, bitmask and bitset in `-bc` (rustorb/rustorb#187).
+  `int8` is the runtime's `CORBA_int8`, sent and typed as an octet. A
+  bitmask or a bitset is a typedef of the unsigned integer that holds its
+  bits, whose descriptor and TypeCode it uses (as the C++ mapping sends
+  them): the bitmask's values are constants `<Scope>_<VALUE>`, the
+  bitset's fields macros `<Name>_<field>(v)` and `<Name>_set_<field>(p,
+  x)` (signed fields are sign-extended). Bitset inheritance is an error;
+  `@default` and `@range` are ignored.
 - C: `-bc -Wbami`, callback AMI (rustorb/rustorb#187). The implied
   `AMI_<I>Handler` interfaces are generated as interfaces on
   `Messaging_ReplyHandler` (from rustorb's `<rustorb/messaging.h>`), and
