@@ -8,6 +8,12 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ### Added
 
+- C: local interfaces in `-bc` (rustorb/rustorb#187). A local interface has
+  the stubs and the `POA_<Name>` structs of an interface; `POA_<Name>__init`
+  makes a struct the implementation of local objects (it is not activated
+  in a POA), `<Name>__create(impl, ev)` makes one, and its stubs call the
+  implementation directly. Its TypeCode is `tk_local_interface`; sending
+  one is `MARSHAL` (minor 4).
 - C#: local interfaces and the IDL 4 bitmask, bitset, `@default` and
   `@range` / `@min` / `@max` in `-bcsharp` (rustorb/rustorb#186). A local
   interface is `I<Name>` and an abstract class `<Name>` on

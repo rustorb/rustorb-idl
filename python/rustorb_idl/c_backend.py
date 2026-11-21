@@ -15,6 +15,11 @@ C Language Mapping 1.0:
   and ``Mod_I__set_<attr>`` for attributes; the skeleton is ``POA_Mod_I``
   with ``POA_Mod_I__epv``, ``POA_Mod_I__vepv``, ``POA_Mod_I__init`` and
   ``POA_Mod_I__fini``;
+- a local interface ``Mod::L`` has the same stubs and ``POA_Mod_L`` structs,
+  without activation: ``POA_Mod_L__init`` makes a struct the
+  implementation of local objects, which ``Mod_L__create(impl, ev)`` makes
+  and whose stubs call it directly (``CORBA_tk_local_interface``; sending
+  one is ``MARSHAL`` minor 4);
 - parameters are passed as tables 1-2 and 1-3 of the mapping say: the
   variable-length out values and results are allocated by the callee and
   freed with ``CORBA_free``.
@@ -26,8 +31,8 @@ reader, writer and freer walk, and ``TC_<Name>``, ``<Name>__alloc()`` and
 ``CORBA_sequence_<T>_allocbuf()`` use. The source holds the descriptors,
 the stubs and the skeletons.
 
-Valuetypes, abstract and local interfaces, ``int8`` and the IDL 4
-bitmask and bitset have no C mapping and are errors (rustorb#187).
+Valuetypes, abstract interfaces, ``int8`` and the IDL 4 bitmask and bitset
+have no C mapping and are errors (rustorb#187).
 """
 
 import os
@@ -193,10 +198,6 @@ class CBackend(object):
             if getattr(n, "is_abstract", False):
                 raise fe.GeneratorError(
                     "abstract interfaces have no C mapping (rustorb#187)", where
-                )
-            if getattr(n, "is_local", False):
-                raise fe.GeneratorError(
-                    "local interfaces are not supported by the C backend yet (rustorb#187)", where
                 )
 
     # -- types ------------------------------------------------------------------
@@ -850,6 +851,11 @@ class CBackend(object):
 
     def interface_type(self, h, node):
         name = self.cname(node)
+        if getattr(node, "is_local", False):
+            h()
+            h("/* local interface %s: implemented by a POA_%s struct (POA_%s__init, no" % (
+                node.name, name, name))
+            h("   activation), whose local objects %s__create makes. */" % name)
         h()
         h("#ifndef _%s_defined" % name)
         h("#define _%s_defined" % name)
@@ -892,11 +898,13 @@ class CBackend(object):
                 self.declare_type(h, op[2], op[6])
         self.named.append(name)
         c()
+        local = getattr(node, "is_local", False)
         c("static rustorb_c_cache _rustorb_c_%s;" % name)
         c(
-            'const rustorb_c_type %s__desc = {CORBA_tk_objref, sizeof(CORBA_Object), "%s", "%s", '
+            'const rustorb_c_type %s__desc = {%s, sizeof(CORBA_Object), "%s", "%s", '
             "NULL, 0, 0, NULL, NULL, -1, 0, 0, &_rustorb_c_%s};"
-            % (name, fe.repository_id(node), node.name, name)
+            % (name, "CORBA_tk_local_interface" if local else "CORBA_tk_objref",
+               fe.repository_id(node), node.name, name)
         )
         # Operation descriptors.
         for op in ops:
@@ -964,6 +972,10 @@ class CBackend(object):
         h()
         h("void POA_%s__init(PortableServer_Servant _servant, CORBA_Environment* _ev);" % name)
         h("void POA_%s__fini(PortableServer_Servant _servant, CORBA_Environment* _ev);" % name)
+        if local:
+            h("/* A local object calling impl (initialised with POA_%s__init; it must" % name)
+            h("   outlive the object's references). */")
+            h("%s %s__create(PortableServer_Servant impl, CORBA_Environment* _ev);" % (name, name))
         c()
         for owner, op in owners:
             self.skel(c, node, owner, op)
@@ -981,8 +993,13 @@ class CBackend(object):
                self.module)
         )
         c("void POA_%s__init(PortableServer_Servant _servant, CORBA_Environment* _ev) {" % name)
-        c("  rustorb_c_servant_init(_servant, &_rustorb_cls_%s, _ev);" % name)
+        c("  rustorb_c_%s_init(_servant, &_rustorb_cls_%s, _ev);" % (
+            "local" if local else "servant", name))
         c("}")
+        if local:
+            c("%s %s__create(PortableServer_Servant impl, CORBA_Environment* _ev) {" % (name, name))
+            c("  return rustorb_c_local_object(impl, _ev);")
+            c("}")
         c("void POA_%s__fini(PortableServer_Servant _servant, CORBA_Environment* _ev) {" % name)
         c("  rustorb_c_servant_fini(_servant, _ev);")
         c("}")

@@ -39,8 +39,9 @@ IDLS = [
     os.path.join(INTEROP_IDL, "PoaProbe.idl"),
     os.path.join(CPP_IDL, "CxxMapping.idl"),
     os.path.join(TEST_IDL, "CosNaming.idl"),
+    os.path.join(TEST_IDL, "LocalTest.idl"),
 ]
-NAMES = ("InteropTest", "AnyTest", "PoaProbe", "CxxMapping", "CosNaming")
+NAMES = ("InteropTest", "AnyTest", "PoaProbe", "CxxMapping", "CosNaming", "LocalTest")
 
 
 def tearDownModule():
@@ -149,17 +150,31 @@ class CBackendTest(unittest.TestCase):
         c = self.c("AnyTest")
         self.assertIn("const rustorb_c_type AnyTest_Node__desc = {", c)
 
+    def test_local_interfaces(self):
+        h, c = self.h("LocalTest"), self.c("LocalTest")
+        # The stubs and the implementation structs, as for an interface.
+        self.assertIn("typedef CORBA_Object LocalTest_Greeter;", h)
+        self.assertIn("CORBA_char* LocalTest_Loud_greet(LocalTest_Loud _obj, const CORBA_char* who, "
+                      "CORBA_Environment* _ev);", h)
+        self.assertIn("typedef struct POA_LocalTest_Loud__vepv {", h)
+        self.assertIn("LocalTest_Loud LocalTest_Loud__create(PortableServer_Servant impl, "
+                      "CORBA_Environment* _ev);", h)
+        # No servant of the ORB: rustorb_c_local_init; tk_local_interface.
+        self.assertIn("rustorb_c_local_init(_servant, &_rustorb_cls_LocalTest_Loud, _ev);", c)
+        self.assertIn("rustorb_c_servant_init(_servant, &_rustorb_cls_LocalTest_Remote, _ev);", c)
+        self.assertIn("const rustorb_c_type LocalTest_Greeter__desc = {CORBA_tk_local_interface,", c)
+        self.assertNotIn("LocalTest_Remote__create", h)
+
     def test_options(self):
         path = os.path.join(INTEROP_IDL, "InteropTest.idl")
         self.assertEqual(cli.main(["-bc", "-Wbami", "-C", OUT, path]), 2)
 
     def test_unsupported(self):
-        # rustorb#187: valuetypes, abstract and local interfaces; and the
-        # IDL 4 bitmask and bitset.
+        # rustorb#187: valuetypes, abstract interfaces; and the IDL 4
+        # bitmask and bitset.
         cases = {
             "valuetype": "module U { valuetype V { public long x; }; };",
             "abstract": "module U { abstract interface A { void a(); }; };",
-            "local": "module U { local interface L { void a(); }; };",
             "bitmask": "module U { bitmask B { X, Y }; };",
         }
         for name, text in cases.items():
