@@ -84,8 +84,13 @@ rustorb/rustorb; see its CHANGELOG.md for them.
   struct is sent or received). A local interface is a module (with its
   `_tc`, a tk_local_interface, and nested definitions) that
   implementations on `CORBA::LocalObject` include, with no stub or
-  skeleton. Valuetypes, abstract interfaces and `-Wbami` are errors for
-  now (rustorb/rustorb#188).
+  skeleton. Valuetypes are classes on `CORBA::ValueBase` (abstract ones
+  modules, custom ones with `CORBA::CustomMarshal`, ones that support an
+  interface servants of it through `PortableServer::ServantMethods`),
+  registered with `Rustorb::Values` (as their own factory when they have
+  no behaviour); value boxes are the boxed values; abstract interfaces are
+  modules with `Rustorb::AbstractInterfaceModule`. `-Wbami` is an error
+  for now (rustorb/rustorb#188).
 
 - C: `-bc` writes the OMG C Language Mapping 1.0 (formal/99-07-35) for
   rustorb's C binding (librustorb_c, rustorb/rustorb#180, #181): a

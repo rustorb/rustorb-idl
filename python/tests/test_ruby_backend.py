@@ -34,8 +34,12 @@ IDLS = [
     os.path.join(CPP_IDL, "Idl4.idl"),
     os.path.join(TEST_IDL, "CosNaming.idl"),
     os.path.join(TEST_IDL, "LocalTest.idl"),
+    os.path.join(INTEROP_IDL, "ValueTest.idl"),
+    os.path.join(INTEROP_IDL, "AbstractTest.idl"),
+    os.path.join(INTEROP_IDL, "CustomTest.idl"),
 ]
-NAMES = ("InteropTest", "AnyTest", "PoaProbe", "CxxMapping", "Idl4", "CosNaming", "LocalTest")
+NAMES = ("InteropTest", "AnyTest", "PoaProbe", "CxxMapping", "Idl4", "CosNaming", "LocalTest", "ValueTest",
+         "AbstractTest", "CustomTest")
 
 
 def tearDownModule():
@@ -193,6 +197,32 @@ class RubyBackendTest(unittest.TestCase):
         self.assertIn("class Remote < ::PortableServer::Servant", sk)
         self.assertNotIn("class Greeter", sk)
 
+    def test_valuetypes(self):
+        s, sk = self.stubs("ValueTest"), self.skels("ValueTest")
+        self.assertIn("  class Point\n    include ::CORBA::ValueBase\n", s)
+        self.assertIn("  class Point3 < ::ValueTest::Point\n", s)
+        self.assertIn('TRUNCATABLE_IDS = ["IDL:ValueTest/Point3:1.0", "IDL:ValueTest/Point:1.0"].freeze', s)
+        self.assertIn('::CORBA::VM_TRUNCATABLE, ::ValueTest::Point._tc, [["z", ::CORBA._tc_long, '
+                      '::CORBA::PUBLIC_MEMBER], ["label", ::CORBA._tc_string, ::CORBA::PRIVATE_MEMBER]]', s)
+        # Valuetypes without behaviour are their own factory.
+        self.assertIn("::Rustorb::Values.register(Point, default: true)", s)
+        self.assertIn("::Rustorb::Values.register(Account)\n", s)
+        # A value box names the type; its values are the boxed ones.
+        self.assertIn('::CORBA::TypeCode.create_value_box_tc(ID, "LongBox", ::CORBA._tc_long)', s)
+        # A valuetype that supports an interface is a servant of it.
+        self.assertIn("    include ::PortableServer::ServantMethods\n", s)
+        self.assertIn('IDS = ["IDL:ValueTest/Tally:1.0", "IDL:ValueTest/Counter:1.0"].freeze', s)
+        self.assertIn('"count" => [:count, ::ValueTest::Counter._ops["count"]]', s)
+        self.assertNotIn("class Tally", sk)
+        a = self.stubs("AbstractTest")
+        self.assertIn("extend ::Rustorb::AbstractInterfaceModule", a)
+        self.assertIn('::CORBA::TypeCode.create_abstract_interface_tc(ID, "Named")', a)
+        self.assertIn("  class Card\n    include ::CORBA::ValueBase\n    include ::AbstractTest::Named\n", a)
+        self.assertNotIn("class Named", self.skels("AbstractTest"))
+        c = self.stubs("CustomTest")
+        self.assertIn("    include ::CORBA::CustomMarshal\n", c)
+        self.assertIn("::CORBA::VM_CUSTOM", c)
+
     def test_lower_case_names(self):
         path = write_idl("lower.idl", """\
             module lower {
@@ -246,8 +276,6 @@ class RubyBackendTest(unittest.TestCase):
         self.assertIn(message, err.getvalue())
 
     def test_unsupported(self):
-        self.unsupported("valuetype V { public long x; };\n", "valuetypes are not supported by the Ruby backend")
-        self.unsupported("abstract interface A { void f(); };\n", "abstract interfaces are not supported")
         self.unsupported("bitset B { bitfield<2> a; };\nbitset C : B { bitfield<2> b; };\n",
                          "bitset inheritance is not supported")
         self.unsupported("interface I { void f(); };\n", "-Wbami is not for ruby", ["-Wbami"])

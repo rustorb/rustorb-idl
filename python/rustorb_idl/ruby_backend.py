@@ -27,10 +27,20 @@ recursive types need nothing from the generated code. IDL 4 (rustorb):
 ``Rustorb::Bitset`` class with an accessor per bitfield, sent as the
 unsigned integer that holds its bits; ``@default`` gives the value of a
 struct member that ``new`` does not get and ``@range`` / ``@min`` /
-``@max`` are checked when a struct is sent or received. Valuetypes and
-abstract interfaces are errors (rustorb#188). A local interface is a
-module that implementations include, with ``CORBA::LocalObject`` as their
-base.
+``@max`` are checked when a struct is sent or received. A local interface
+is a module that implementations include, with ``CORBA::LocalObject`` as
+their base.
+
+A valuetype is a class including ``CORBA::ValueBase`` (or deriving from
+its concrete base) with ``TRUNCATABLE_IDS``, ``MEMBERS`` and an accessor
+per state member; an abstract valuetype is a module the derived classes
+include; a custom one includes ``CORBA::CustomMarshal``; one that supports
+an interface includes ``PortableServer::ServantMethods`` (an instance is a
+servant of it) or the abstract interface's module. Valuetypes without
+operations, initializers or supported interfaces are their own factory.
+A value box is the boxed value itself; its module only names the type. An
+abstract interface is a module like an interface's, whose ``_narrow``
+keeps values.
 """
 
 import math
@@ -189,15 +199,8 @@ class RubyBackend(object):
     # -- checks -------------------------------------------------------------
 
     def check_node(self, n, where):
-        if fe.is_valuetype(n):
-            raise fe.GeneratorError("valuetypes are not supported by the Ruby backend yet (rustorb#188)", where)
         if fe.is_native(n):
             raise fe.GeneratorError("native %s cannot be used in Ruby" % n.name, where)
-        if fe.is_interface(n):
-            if getattr(n, "is_abstract", False):
-                raise fe.GeneratorError(
-                    "abstract interfaces are not supported by the Ruby backend yet (rustorb#188)", where
-                )
 
     # -- TypeCodes ------------------------------------------------------------
 
@@ -363,7 +366,13 @@ class RubyBackend(object):
             self.w("# native %s" % node.name)
             self.w()
         elif fe.is_valuetype(node):
-            raise fe.GeneratorError("valuetypes are not supported by the Ruby backend yet (rustorb#188)", node)
+            if fe.is_forward(node):
+                self.w("# forward declaration of valuetype %s" % node.name)
+                self.w()
+            elif node.is_boxed:
+                self.value_box(node)
+            else:
+                self.valuetype(node)
         elif fe.is_bitmask(node):
             self.bitmask(node)
         elif fe.is_bitset(node):
@@ -373,9 +382,20 @@ class RubyBackend(object):
                 "%s definitions are not supported by the Ruby backend" % fe.kind_name(node), node
             )
 
+    @staticmethod
+    def is_member_only(d):
+        """Operations, attributes, state members and initializers: what a
+        scope holds that is not a definition."""
+        return (
+            fe.is_operation(d)
+            or fe.is_attribute(d)
+            or hasattr(d, "is_public")
+            or type(d).__name__ == "IDLFactory"
+        )
+
     def nested(self, scope):
         for d in fe.members_of(scope):
-            if fe.is_operation(d) or fe.is_attribute(d):
+            if self.is_member_only(d):
                 continue
             self.definition(d)
 
@@ -549,9 +569,7 @@ class RubyBackend(object):
         return self.literal(value, r)
 
     def nested_inside(self, node):
-        inner = [
-            d for d in fe.members_of(node) if not (fe.is_operation(d) or fe.is_attribute(d))
-        ]
+        inner = [d for d in fe.members_of(node) if not self.is_member_only(d)]
         if inner:
             self.w()
             self.nested(node)
@@ -665,10 +683,172 @@ class RubyBackend(object):
         w("end")
         w()
 
+    # valuetypes
+
+    def value_modifier(self, node):
+        if node.is_abstract:
+            return "::CORBA::VM_ABSTRACT"
+        if node.is_custom:
+            return "::CORBA::VM_CUSTOM"
+        if node.is_truncatable:
+            return "::CORBA::VM_TRUNCATABLE"
+        return "::CORBA::VM_NONE"
+
+    def value_box(self, node):
+        """A value box: the boxed value itself (nil for null); the module
+        only names the type."""
+        w = self.w
+        t = fe.type_of(node.boxed_type, node)
+        name = const_name(node.name)
+        w("module %s" % name)
+        w.indent()
+        w('ID = "%s"' % fe.repository_id(node))
+        w()
+        self.tc_method(
+            node, '::CORBA::TypeCode.create_value_box_tc(ID, "%s", %s)' % (node.name, self.tc(t, node))
+        )
+        w.dedent()
+        w("end")
+        w("::Rustorb::Values.register(%s)" % name)
+        w()
+
+    def servant_entries(self, nodes):
+        """The ``_operations`` entries of a servant of the interfaces nodes
+        (with their bases)."""
+        entries = []
+        seen = set()
+        for owner in nodes:
+            for op in self.operations(owner):
+                if op[0] in seen:
+                    continue
+                seen.add(op[0])
+                entries.append(
+                    '"%s" => [:%s, %s._ops["%s"]]' % (op[0], self.op_method(op), self.path(owner), op[0])
+                )
+        return entries
+
+    def operations_method(self, w, entries):
+        w("def self._operations")
+        w.indent()
+        if entries:
+            w("@_operations ||= {")
+            w.indent()
+            for i, e in enumerate(entries):
+                w(e + ("," if i + 1 < len(entries) else ""))
+            w.dedent()
+            w("}.freeze")
+        else:
+            w("{}.freeze")
+        w.dedent()
+        w("end")
+
+    def valuetype(self, node):
+        w = self.w
+        name = const_name(node.name)
+        supported = [self.full(i) for i in fe.supported_interfaces(node)]
+        for i in supported:
+            if i.is_local:
+                raise fe.GeneratorError("a valuetype cannot support a local interface", node)
+        for d in fe.members_of(node):
+            if fe.is_operation(d):
+                fe.reject_context(d, self.LANGUAGE)
+        base = fe.concrete_base(node)
+        base = self.full(base) if base is not None else None
+        abstract_bases = [self.full(b) for b in fe.value_bases(node) if b.is_abstract]
+        members = [(m.name, fe.type_of(m.type, m), m.is_public, m) for m in node.state_members]
+        if node.is_abstract:
+            # An abstract valuetype: a module that the valuetypes deriving
+            # from it include.
+            w("module %s" % name)
+            w.indent()
+            w("include ::CORBA::ValueBase")
+        else:
+            w("class %s%s" % (name, (" < " + self.path(base)) if base is not None else ""))
+            w.indent()
+            if base is None:
+                w("include ::CORBA::ValueBase")
+        for b in abstract_bases:
+            w("include %s" % self.path(b))
+        if node.is_custom:
+            w("include ::CORBA::CustomMarshal")
+        abstract_ifaces = [i for i in supported if i.is_abstract]
+        concrete_ifaces = [i for i in supported if not i.is_abstract]
+        for i in abstract_ifaces:
+            w("include %s" % self.path(i))
+        if concrete_ifaces:
+            w("include ::PortableServer::ServantMethods")
+        w('ID = "%s"' % fe.repository_id(node))
+        w(
+            "TRUNCATABLE_IDS = [%s].freeze"
+            % ", ".join('"%s"' % i for i in cxx_backend.CxxBackend.sent_ids(self, node))
+        )
+        w("MEMBERS = [%s].freeze" % ", ".join('"%s"' % method_name(m) for m, _, _, _ in members))
+        if members:
+            w("attr_accessor %s" % ", ".join(":" + method_name(m) for m, _, _, _ in members))
+        if concrete_ifaces:
+            # An instance is a servant of the interfaces it supports.
+            ids = [fe.repository_id(node)]
+            for i in concrete_ifaces:
+                for a in [i] + self.ancestors(i):
+                    rid = fe.repository_id(a)
+                    if rid not in ids:
+                        ids.append(rid)
+            w("IDS = [%s].freeze" % ", ".join('"%s"' % i for i in ids))
+            w()
+            nodes = []
+            for i in concrete_ifaces:
+                nodes += [i] + self.ancestors(i)
+            self.operations_method(w, self.servant_entries(nodes))
+        w()
+        self.tc_method(
+            node,
+            '::CORBA::TypeCode.create_value_tc(ID, "%s", %s, %s, [%s])'
+            % (
+                node.name,
+                self.value_modifier(node),
+                (self.path(base) + "._tc") if base is not None else "nil",
+                ", ".join(
+                    '["%s", %s, ::CORBA::%s]'
+                    % (m, self.tc(t, d), "PUBLIC_MEMBER" if public else "PRIVATE_MEMBER")
+                    for m, t, public, d in members
+                ),
+            ),
+        )
+        # The operations of the abstract interfaces it supports are the
+        # implementation's (not the stub's).
+        for i in abstract_ifaces:
+            for op in self.operations(i):
+                if op[0].startswith("_set_"):
+                    w()
+                    w("def %s(_value)" % self.op_method(op))
+                    w.indent()
+                    w('raise ::CORBA::NO_IMPLEMENT.new("#{self.class}#%s", 0, ::CORBA::COMPLETED_NO)'
+                      % self.op_method(op))
+                    w.dedent()
+                    w("end")
+                else:
+                    w()
+                    w("def %s(*)" % self.op_method(op))
+                    w.indent()
+                    w('raise ::CORBA::NO_IMPLEMENT.new("#{self.class}#%s", 0, ::CORBA::COMPLETED_NO)'
+                      % self.op_method(op))
+                    w.dedent()
+                    w("end")
+        self.nested_inside(node)
+        w.dedent()
+        w("end")
+        # A valuetype with operations or initializers needs an
+        # implementation, which the application registers a factory for;
+        # so does a custom one. Otherwise the class is its own factory.
+        own = not node.is_abstract and not node.is_custom and not fe.has_behaviour(node)
+        w("::Rustorb::Values.register(%s%s)" % (name, ", default: true" if own else ""))
+        w()
+
     def interface(self, node):
         w = self.w
         if getattr(node, "is_local", False):
             return self.local_interface(node)
+        abstract = getattr(node, "is_abstract", False)
         name = const_name(node.name)
         path = self.path(node)
         ops = self.operations(node)
@@ -678,14 +858,17 @@ class RubyBackend(object):
         w("module %s" % name)
         w.indent()
         w('ID = "%s"' % fe.repository_id(node))
-        w("extend ::Rustorb::InterfaceModule")
+        w("extend ::Rustorb::%sInterfaceModule" % ("Abstract" if abstract else ""))
         for b in self.bases(node):
             self.check_node(b, node)
             w("include %s" % self.path(b))
         w()
         w("def self._tc")
         w.indent()
-        w('@_tc ||= ::CORBA::TypeCode.create_interface_tc(ID, "%s")' % node.name)
+        w(
+            '@_tc ||= ::CORBA::TypeCode.create_%sinterface_tc(ID, "%s")'
+            % ("abstract_" if abstract else "", node.name)
+        )
         w.dedent()
         w("end")
         inner = [d for d in fe.members_of(node) if not (fe.is_operation(d) or fe.is_attribute(d))]
@@ -727,7 +910,8 @@ class RubyBackend(object):
         w.dedent()
         w("end")
         w()
-        self.skels.append(node)
+        if not abstract:
+            self.skels.append(node)
 
     # -- the S file -------------------------------------------------------------------
 
@@ -741,30 +925,7 @@ class RubyBackend(object):
         s.indent()
         s("IDS = [%s].freeze" % ", ".join('"%s"' % i for i in ids))
         s()
-        s("def self._operations")
-        s.indent()
-        entries = []
-        seen = set()
-        for owner in [node] + self.ancestors(node):
-            for op in self.operations(owner):
-                if op[0] in seen:
-                    continue
-                seen.add(op[0])
-                entries.append(
-                    '"%s" => [:%s, %s._ops["%s"]]'
-                    % (op[0], self.op_method(op), self.path(owner), op[0])
-                )
-        if entries:
-            s("@_operations ||= {")
-            s.indent()
-            for i, e in enumerate(entries):
-                s(e + ("," if i + 1 < len(entries) else ""))
-            s.dedent()
-            s("}.freeze")
-        else:
-            s("{}.freeze")
-        s.dedent()
-        s("end")
+        self.operations_method(s, self.servant_entries([node] + self.ancestors(node)))
         s.dedent()
         s("end")
         for _ in range(len(path)):
