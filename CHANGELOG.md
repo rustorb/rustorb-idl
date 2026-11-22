@@ -6,6 +6,12 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-22
+
+Three new back ends: `-bcsharp` (IDL4 to C#), `-bc` (the C mapping) and
+`-bruby` (the Ruby mapping), for the .NET, C and Ruby bindings of
+rustorb 0.7.0 (rustorb/rustorb#176).
+
 ### Added
 
 - C: IDL 4 `int8`, bitmask and bitset in `-bc` (rustorb/rustorb#187).
