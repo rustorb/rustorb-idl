@@ -28,8 +28,27 @@ The names are those of the IDL (the IDL naming scheme, 7.1.1.1);
 instead. Names that are C# keywords get ``@``, and names that clash with
 the ones the mapping or the runtime introduces get ``_``.
 
-Valuetypes, abstract and local interfaces and ``-Wbami`` are not mapped
-yet (rustorb#186).
+A valuetype ``V`` is the abstract class ``V`` of IDL4 to C# 7.6 (state
+members as properties, private ones protected; operations, those of the
+interfaces it supports and factories as abstract methods, factories marked
+``[Omg.Types.Factory]``), deriving from its concrete base or
+``Corba.ValueBase``; an abstract valuetype is the interface ``IV``. The
+rest is rustorb's, after the C++ mapping: a valuetype without operations
+also has the class ``OBV_<Module>.V`` with a constructor of every state
+member, which its default factory makes; a value box is a class with the
+boxed value as the property ``value``; a custom valuetype implements
+``Corba.ICustomMarshal``. The default factories and the TypeCodes of the
+valuetypes are registered by a module initialiser. An abstract interface
+``A`` is the interface ``IA`` and the stub class ``A``; each concrete
+interface also has the tie ``<Name>POATie``.
+
+``-Wbami`` adds the ``sendc_`` operations of callback AMI to the stub
+class (as in the Java mapping: not to ``I<Name>``, which other classes may
+implement; the handlers are the implied ``AMI_<Name>Handler``
+interfaces; ``Messaging`` is the runtime's). Every user exception is
+registered with the runtime, which raises those of AMI ExceptionHolders.
+
+Local interfaces are not mapped yet (rustorb#186).
 """
 
 import os
@@ -140,7 +159,26 @@ MIN_SIZE = {
 
 INT_RANGES = cxx_backend.INT_RANGES
 
-UNSUPPORTED = {"bitmask": "bitmask", "bitset": "bitset", "Principal": "Principal"}
+UNSUPPORTED = {"Principal": "Principal"}
+
+
+def holder_kind(bits):
+    """The unsigned integer that holds ``bits`` bits, as a bitmask or a
+    bitset is sent (IDL 4 / DDS-XTypes): octet, ushort, ulong or ulonglong."""
+    if bits <= 8:
+        return "octet"
+    if bits <= 16:
+        return "ushort"
+    if bits <= 32:
+        return "ulong"
+    return "ulonglong"
+
+
+def bits_holder(node):
+    """The holder kind of a bitmask or bitset definition."""
+    if fe.is_bitmask(node):
+        return holder_kind(node.bit_bound)
+    return holder_kind(max(node.bit_size, 1))
 
 RT = "global::Rustorb"
 CORBA = "global::Corba"
@@ -273,7 +311,7 @@ class CSharpBackend(object):
     def scoped(self, node):
         """The fully qualified C# type of a definition."""
         n = self.full(node)
-        if fe.is_interface(n):
+        if fe.is_interface(n) or (fe.is_valuetype(n) and n.is_abstract and not n.is_boxed):
             return self.qualify(n, self.iface_name(n))
         return self.qualify(n, self.type_name(n))
 
@@ -293,10 +331,6 @@ class CSharpBackend(object):
     # -- types -----------------------------------------------------------
 
     def unsupported(self, n, where):
-        if fe.is_valuetype(n):
-            raise fe.GeneratorError(
-                "valuetypes are not supported by the C# backend yet (rustorb#186)", where
-            )
         if fe.is_native(n):
             raise fe.GeneratorError("native %s cannot be used in C#" % n.name, where)
 
@@ -325,26 +359,23 @@ class CSharpBackend(object):
             return self.cstype(t.content, where) + "[]"
         if k == "fixed":
             return "decimal"
+        if k in ("bitmask", "bitset"):
+            return self.scoped(t.node)
         if k == "named":
             n = self.full(t.node)
             self.unsupported(n, where)
             if fe.is_typedef(n):
                 return self.cstype(fe.type_of(n.type, n), where)
             if fe.is_interface(n):
-                self.check_interface(n, where)
+                return self.scoped(n) + "?"
+            if fe.is_valuetype(n):
                 return self.scoped(n) + "?"
             return self.scoped(n)
         raise fe.GeneratorError("no C# type for %r" % t, where)
 
-    def check_interface(self, n, where):
-        if getattr(n, "is_abstract", False):
-            raise fe.GeneratorError(
-                "abstract interfaces are not supported by the C# backend yet (rustorb#186)", where
-            )
-        if getattr(n, "is_local", False):
-            raise fe.GeneratorError(
-                "local interfaces are not supported by the C# backend yet (rustorb#186)", where
-            )
+    @staticmethod
+    def is_local(n):
+        return bool(getattr(n, "is_local", False))
 
     def new_array(self, content, length):
         """``new T[length]`` for elements of type content."""
@@ -539,6 +570,8 @@ class CSharpBackend(object):
                 w("}")
             w.dedent()
             w("}")
+        elif k in ("bitmask", "bitset"):
+            w("%s.write(__out, %s);" % (self.helper(t.node), expr))
         elif k == "named":
             n = self.full(t.node)
             self.unsupported(n, where)
@@ -612,6 +645,8 @@ class CSharpBackend(object):
             w("%s = %s;" % (target, a))
             w.dedent()
             w("}")
+        elif k in ("bitmask", "bitset"):
+            w("%s = %s.read(__in);" % (target, self.helper(t.node)))
         elif k == "named":
             n = self.full(t.node)
             self.unsupported(n, where)
@@ -624,7 +659,10 @@ class CSharpBackend(object):
         r = t.resolved()
         if r.kind in MIN_SIZE:
             return MIN_SIZE[r.kind]
-        if r.kind == "named" and (fe.is_enum(r.node) or fe.is_interface(r.node)):
+        if r.kind in ("bitmask", "bitset"):
+            return MIN_SIZE[bits_holder(r.node)]
+        if r.kind == "named" and (fe.is_enum(r.node) or fe.is_interface(r.node)
+                                  or fe.is_valuetype(r.node)):
             return 4
         return 1
 
@@ -636,7 +674,9 @@ class CSharpBackend(object):
         if k in TCKIND:
             return "%s.TypeCodes.Simple(%s.TCKind.%s)" % (RT, CORBA, TCKIND[k])
         if k == "int8":
-            raise fe.GeneratorError("int8 has no TypeCode in GIOP", where)
+            # GIOP has no TypeCode of int8; as in the C++ mapping, its
+            # TypeCode is that of octet, which is sent the same way.
+            return "%s.TypeCodes.Simple(%s.TCKind.tk_octet)" % (RT, CORBA)
         if k == "string":
             return "%s.TypeCodes.String(%d)" % (RT, t.bound)
         if k == "wstring":
@@ -650,6 +690,8 @@ class CSharpBackend(object):
             return "%s.TypeCodes.Sequence(%s, %d)" % (RT, self.tc_expr(t.content, where), t.bound)
         if k == "array":
             return "%s.TypeCodes.Array(%s, %d)" % (RT, self.tc_expr(t.content, where), t.length)
+        if k in ("bitmask", "bitset"):
+            return "%s.type()" % self.helper(t.node)
         if k == "named":
             n = self.full(t.node)
             self.unsupported(n, where)
@@ -664,26 +706,42 @@ class CSharpBackend(object):
         w = Writer()
         w(HEADER % self.idl_name)
         w("#nullable enable")
-        w("#pragma warning disable CS0108, CS0114, CS1591, CS8981")
+        w("#pragma warning disable CS0108, CS0114, CS1591, CS8981, CA2255")
+        self.registrations = []
         for it in fe.definitions(self.spec):
             n = it.node
             if fe.is_module(n) or fe.is_operation(n) or fe.is_attribute(n):
                 continue
+            self.extra = []
             body = Writer()
             self.definition(body, n)
-            if not body.lines:
-                continue
+            for ns, lines in [(self.namespace_of(n), body.lines)] + self.extra:
+                if not lines:
+                    continue
+                w()
+                if ns:
+                    w("namespace %s" % ns)
+                    w("{")
+                    w.indent()
+                for line in lines:
+                    w(line) if line else w()
+                if ns:
+                    w.dedent()
+                    w("}")
+        if self.registrations:
+            # The default factories and TypeCodes of the valuetypes, known to
+            # the runtime when the assembly is loaded.
+            name = re.sub(r"\W", "_", os.path.splitext(self.idl_name)[0])
             w()
-            ns = self.namespace_of(n)
-            if ns:
-                w("namespace %s" % ns)
-                w("{")
-                w.indent()
-            for line in body.lines:
-                w(line) if line else w()
-            if ns:
-                w.dedent()
-                w("}")
+            w("internal static class __RustorbValues_%s" % name)
+            w("{")
+            w("    [global::System.Runtime.CompilerServices.ModuleInitializer]")
+            w("    internal static void Register()")
+            w("    {")
+            for line in self.registrations:
+                w("        " + line)
+            w("    }")
+            w("}")
         return w.text()
 
     def definition(self, w, node):
@@ -692,6 +750,10 @@ class CSharpBackend(object):
                 self.module_const(w, node)
         elif fe.is_enum(node):
             self.enum(w, node)
+        elif fe.is_bitmask(node):
+            self.bitmask(w, node)
+        elif fe.is_bitset(node):
+            self.bitset(w, node)
         elif fe.is_typedef(node):
             self.typedef(w, node)
         elif fe.is_exception(node):
@@ -708,9 +770,11 @@ class CSharpBackend(object):
         elif fe.is_native(node):
             pass
         elif fe.is_valuetype(node):
-            raise fe.GeneratorError(
-                "valuetypes are not supported by the C# backend yet (rustorb#186)", node
-            )
+            if not fe.is_forward(node):
+                if node.is_boxed:
+                    self.value_box(w, node)
+                else:
+                    self.valuetype(w, node)
         else:
             raise fe.GeneratorError(
                 "%s definitions are not supported by the C# backend" % fe.kind_name(node), node
@@ -834,6 +898,96 @@ class CSharpBackend(object):
 
         self.helper_class(w, node, scoped, tc, write_body, read_body)
 
+    # IDL 4 bitmasks and bitsets: sent as the unsigned integer that holds
+    # their bits, whose TypeCode is theirs too (as in the C++ mapping)
+
+    def bitmask(self, w, node):
+        name = self.type_name(node)
+        scoped = self.scoped(node)
+        u = bits_holder(node)
+        w("[global::System.Flags]")
+        w("public enum %s : %s" % (name, BASIC[u]))
+        w("{")
+        for v in node.values:
+            w("    %s = (%s)1 << %d," % (self.enum_value(v.name), BASIC[u], v.position))
+        w("}")
+        w()
+        def write_body(w):
+            w("__out.write_%s((%s)__v);" % (STREAM[u], BASIC[u]))
+
+        def read_body(w):
+            w("return (%s)__in.read_%s();" % (scoped, STREAM[u]))
+
+        self.helper_class(w, node, scoped, self.tc_expr(fe.Type(u), node), write_body, read_body)
+
+    def bitfield_kind(self, f, where):
+        """The kind of the destination type of a bitfield: an integer or boolean."""
+        kind = fe.BASIC.get(" ".join(str(f.type).split()))
+        if kind not in INT_RANGES and kind != "boolean":
+            raise fe.GeneratorError("a bitfield of %s is not supported" % f.type, where)
+        return kind
+
+    def bitset(self, w, node):
+        name = self.type_name(node)
+        bare = name.lstrip("@")
+        scoped = self.scoped(node)
+        if node.base is not None:
+            raise fe.GeneratorError("bitset inheritance is not supported", node)
+        u = bits_holder(node)
+        fields = [(f, self.bitfield_kind(f, node), self.member_name(f.name, bare))
+                  for f in node.bitfields if f.name]
+        w("public struct %s : global::System.IEquatable<%s>" % (name, name))
+        w("{")
+        w.indent()
+        for f, k, p in fields:
+            w("/// <summary>%d bit%s from bit %d.</summary>" % (f.bits, "" if f.bits == 1 else "s", f.position))
+            w("public %s %s { get; set; }" % (BASIC[k], p))
+            w()
+        w("public bool Equals(%s __o) => %s;" % (
+            name, " && ".join("%s == __o.%s" % (p, p) for _, _, p in fields) or "true"))
+        w()
+        w("public override bool Equals(object? __o) => __o is %s __b && Equals(__b);" % name)
+        w()
+        w("public override int GetHashCode()")
+        w("{")
+        w("    var h = new global::System.HashCode();")
+        for _, _, p in fields:
+            w("    h.Add(%s);" % p)
+        w("    return h.ToHashCode();")
+        w("}")
+        w()
+        w("public static bool operator ==(%s a, %s b) => a.Equals(b);" % (name, name))
+        w()
+        w("public static bool operator !=(%s a, %s b) => !a.Equals(b);" % (name, name))
+        w.dedent()
+        w("}")
+        w()
+        ut = BASIC[u]
+
+        def write_body(w):
+            w("%s __x = 0;" % ut)
+            for f, k, p in fields:
+                bits = "(__v.%s ? 1UL : 0UL)" % p if k == "boolean" else "(ulong)__v.%s" % p
+                w("__x |= (%s)((%s & 0x%XUL) << %d);" % (ut, bits, (1 << f.bits) - 1, f.position))
+            w("__out.write_%s(__x);" % STREAM[u])
+
+        def read_body(w):
+            w("ulong __x = __in.read_%s();" % STREAM[u])
+            w("var __r = new %s();" % scoped)
+            for f, k, p in fields:
+                field = "((__x >> %d) & 0x%XUL)" % (f.position, (1 << f.bits) - 1)
+                if k == "boolean":
+                    w("__r.%s = %s != 0;" % (p, field))
+                elif k in ("octet", "ushort", "ulong", "ulonglong"):
+                    w("__r.%s = (%s)%s;" % (p, BASIC[k], field))
+                else:
+                    # A signed bitfield: sign-extend its top bit.
+                    sh = 64 - f.bits
+                    w("__r.%s = (%s)((long)(%s << %d) >> %d);" % (p, BASIC[k], field, sh, sh))
+            w("return __r;")
+
+        self.helper_class(w, node, scoped, self.tc_expr(fe.Type(u), node), write_body, read_body)
+
     # typedefs
 
     def typedef(self, w, node):
@@ -856,6 +1010,29 @@ class CSharpBackend(object):
     def members(self, node):
         return cxx_backend.CxxBackend.members(self, node)
 
+    def member_default(self, m, t):
+        """The initial value of a member from its IDL 4 ``@default``, or None."""
+        a = fe.annotation(m, "default")
+        if a is None:
+            return None
+        r = t.resolved()
+        if r.kind not in INT_RANGES and r.kind not in ("boolean", "float", "double", "string"):
+            raise fe.GeneratorError("@default of a %s member is not supported" % r.kind, m)
+        value = a.value
+        if r.kind == "boolean":
+            value = str(value).upper() == "TRUE"
+        elif r.kind == "string":
+            value = str(value).strip('"')
+        return self.literal(value, r)
+
+    def member_range(self, m, t):
+        """``(min, max)`` C# literals from ``@range`` / ``@min`` / ``@max``
+        (either may be None), or None."""
+        return cxx_backend.CxxBackend.member_range(self, m, t)
+
+    def range_test(self, value, bounds):
+        return cxx_backend.CxxBackend.range_test(self, value, bounds)
+
     def struct(self, w, node, exception=False):
         name = self.type_name(node)
         bare = name.lstrip("@")
@@ -875,8 +1052,10 @@ class CSharpBackend(object):
             w()
         w("public %s()" % bare)
         w("{")
-        for m, t, p in props:
-            d = self.default(t, node)
+        for (m, t, p), mn in zip(props, node.members):
+            d = self.member_default(mn, t)
+            if d is None:
+                d = self.default(t, node)
             if d is not None:
                 w("    %s = %s;" % (p, d))
         w("}")
@@ -927,14 +1106,24 @@ class CSharpBackend(object):
         w()
         if exception:
             tc_fn = "Exception"
+            self.registrations.append('global::Rustorb.UserExceptions.Register<%s>("%s", %s.read, %s.write);'
+                                      % (scoped, fe.repository_id(node), self.helper(node), self.helper(node)))
         else:
             tc_fn = "Struct"
         tc = '%s.TypeCodes.%s(__id, "%s", new string[] { %s }, new %s[] { %s })' % (
             RT, tc_fn, node.name, ", ".join('"%s"' % m for m, _ in members), TC,
             ", ".join(self.tc_expr(t, node) for _, t in members))
 
+        ranges = [self.member_range(mn, t) for (m, t, p), mn in zip(props, node.members)]
+
         def write_body(w):
             w("%s.Seq.NotNull(__v);" % RT)
+            for (m, t, p), bounds in zip(props, ranges):
+                if bounds is not None:
+                    # @range: values outside it are not sent.
+                    w("if (%s)" % self.range_test("__v." + p, bounds))
+                    w('    throw new %s.BAD_PARAM("%s is out of its @range", 0, %s.CompletionStatus.COMPLETED_NO);'
+                      % (CORBA, m, CORBA))
             for m, t, p in props:
                 self.write(w, t, "__v." + p, 0, node)
 
@@ -942,10 +1131,12 @@ class CSharpBackend(object):
             if not props:
                 w("return new %s();" % scoped)
                 return
-            for m, t, p in props:
+            for (m, t, p), bounds in zip(props, ranges):
                 v = "__m_" + m
                 w("%s %s;" % (self.cstype(t, node), v))
                 self.read(w, t, v, 0, node)
+                if bounds is not None:
+                    w("if (%s) __in.fail();" % self.range_test(v, bounds))
             w("return new %s(%s);" % (scoped, ", ".join("__m_" + m for m, _, _ in props)))
 
         self.helper_class(w, node, scoped, tc, write_body, read_body)
@@ -1170,6 +1361,272 @@ class CSharpBackend(object):
             v = int(label)
         return "%dUL" % (v & ((1 << 64) - 1))
 
+    # valuetypes
+
+    def state_members(self, node):
+        return cxx_backend.CxxBackend.state_members(self, node)
+
+    def all_state_members(self, node):
+        return cxx_backend.CxxBackend.all_state_members(self, node)
+
+    def value_ops(self, node):
+        """The operations a value of ``node`` has: its own, those of its
+        abstract base valuetypes and those of the interfaces it supports
+        (with their bases), each once, as :meth:`operations` lists them."""
+        ops = []
+        seen = set()
+
+        def add(n):
+            for o in self.operations(n):
+                if o[0] not in seen:
+                    seen.add(o[0])
+                    ops.append(o)
+
+        def walk(v):
+            add(v)
+            for b in fe.value_bases(v):
+                b = self.full(b)
+                if b.is_abstract:
+                    walk(b)
+            for i in fe.supported_interfaces(v):
+                i = self.full(i)
+                for n in [i] + self.ancestors(i):
+                    add(self.full(n))
+
+        walk(node)
+        return ops
+
+    def inherited_value_ops(self, node):
+        """The operation names the concrete base valuetypes declare."""
+        base = fe.concrete_base(node)
+        if base is None:
+            return set()
+        base = self.full(base)
+        return set(o[0] for o in self.value_ops(base)) | self.inherited_value_ops(base)
+
+    def value_implements(self, node):
+        """The interfaces the class of a valuetype implements: its abstract
+        base valuetypes, the operations of the interfaces it supports, the
+        abstract interfaces it supports."""
+        out = [self.scoped(self.full(b)) for b in fe.value_bases(node) if b.is_abstract]
+        for i in fe.supported_interfaces(node):
+            out.append(self.operations_name(self.full(i)))
+        return out
+
+    def obv_namespace(self, node):
+        """The namespace of the OBV_ class of a valuetype (as for C++,
+        OBV_ before the outermost module), or "" outside modules."""
+        ns = self.namespace_of(node)
+        return ("OBV_" + ns) if ns else ""
+
+    def valuetype(self, w, node):
+        cxx_backend.CxxBackend.check_value(self, node)
+        for d in fe.members_of(node):
+            if not (fe.is_operation(d) or fe.is_attribute(d) or fe.is_const(d)
+                    or hasattr(d, "is_public") or d in node.factories):
+                raise fe.GeneratorError(
+                    "types defined in a valuetype are not supported by the C# backend", d)
+        name = self.type_name(node)
+        bare = name.lstrip("@")
+        base = fe.concrete_base(node)
+        base = self.full(base) if base is not None else None
+        members = self.state_members(node)
+        props = [(m, t, public, self.member_name(m, bare)) for m, t, public in members]
+        inherited = self.inherited_value_ops(node)
+        ops = [o for o in self.value_ops(node) if o[0] not in inherited]
+        consts = [d for d in fe.members_of(node) if fe.is_const(d)]
+        if node.is_abstract:
+            iname = self.iface_name(node)
+            ext = self.value_implements(node) or ["%s.IValueBase" % CORBA]
+            w("public interface %s : %s" % (iname, ", ".join(ext)))
+            w("{")
+            w.indent()
+            self.interface_members(w, self.op_members(node, self.operations(node)))
+            w.dedent()
+            w("}")
+            w()
+        else:
+            ext = [self.scoped(base) if base is not None else "%s.ValueBase" % CORBA]
+            if node.is_custom:
+                ext.append("%s.ICustomMarshal" % CORBA)
+            ext += self.value_implements(node)
+            w("/// <summary>The valuetype %s: derive from it (or from OBV_ classes, for" % node.name)
+            w("/// valuetypes without operations) to make instances.</summary>")
+            w("public abstract class %s : %s" % (name, ", ".join(ext)))
+            w("{")
+            w.indent()
+            w("private static readonly string[] __ids = { %s };" % ", ".join(
+                '"%s"' % i for i in cxx_backend.CxxBackend.sent_ids(self, node)))
+            w()
+            for m, t, public, p in props:
+                d = self.default(t, node)
+                w("%s %s %s { get; set; }%s" % ("public" if public else "protected", self.cstype(t, node), p,
+                                               (" = %s;" % d) if d is not None else ""))
+            if props:
+                w()
+            for c in consts:
+                t = fe.type_of(c.type, c)
+                w("public const %s %s = %s;" % (self.cstype(t, c), self.const_name(c.name),
+                                                self.literal(c.value, t)))
+                w()
+            for m in self.op_members(node, ops):
+                self.interface_members(w, [m], "public abstract ")
+                w()
+            for f in node.factories:
+                params = [(a.name, fe.type_of(a.type, a), "in") for a in f.arguments]
+                w("[global::Omg.Types.Factory]")
+                w("public abstract void %s(%s);" % (self.member_name(f.name), self.params_decl(params, node)))
+                w()
+            if node.is_custom:
+                w("public abstract void marshal(%s.DataOutputStream os);" % CORBA)
+                w()
+                w("public abstract void unmarshal(%s.DataInputStream @is);" % CORBA)
+                w()
+            w("public override string[] _truncatable_ids() => __ids;")
+            if not node.is_custom:
+                for fn, arg, op in (("_write", OUT, self.write), ("_read", IN, self.read)):
+                    v = "__out" if fn == "_write" else "__in"
+                    w()
+                    w("public override void %s(%s %s)" % (fn, arg, v))
+                    w("{")
+                    w.indent()
+                    if base is not None:
+                        w("base.%s(%s);" % (fn, v))
+                    for m, t, public, p in props:
+                        op(w, t, "this." + p, 0, node)
+                    w.dedent()
+                    w("}")
+            w.dedent()
+            w("}")
+            w()
+            if not node.is_custom and not fe.has_behaviour(node):
+                self.obv_class(node)
+        self.value_helper(w, node, base, members)
+
+    def obv_class(self, node):
+        """OBV_<Module>.<Name>: the class of a valuetype without operations,
+        with a constructor that takes every state member; its default
+        factory makes them."""
+        name = self.type_name(node)
+        bare = name.lstrip("@")
+        ns = self.obv_namespace(node)
+        cls = name if ns else "OBV_" + bare
+        everything = self.all_state_members(node)
+        w = Writer()
+        w("public class %s : %s" % (cls, self.scoped(node)))
+        w("{")
+        w.indent()
+        w("public %s()" % cls.lstrip("@"))
+        w("{")
+        w("}")
+        if everything:
+            w()
+            w("public %s(%s)" % (cls.lstrip("@"), ", ".join(
+                "%s %s" % (self.cstype(t, node), self.param_name(m)) for m, t, _ in everything)))
+            w("{")
+            for m, t, _ in everything:
+                w("    this.%s = %s;" % (self.member_name(m, self.owner_of(node, m)), self.param_name(m)))
+            w("}")
+        w.dedent()
+        w("}")
+        w()
+        self.extra.append((ns, w.lines))
+        full = "global::" + ((ns + ".") if ns else "") + cls
+        self.registrations.append('global::Rustorb.Values.Default("%s", () => new %s());'
+                                  % (fe.repository_id(node), full))
+
+    def owner_of(self, node, member):
+        """The bare class name of the valuetype (node or a base) that
+        declares the state member."""
+        n = node
+        while n is not None:
+            if any(m.name == member for m in n.state_members):
+                return self.type_name(n).lstrip("@")
+            b = fe.concrete_base(n)
+            n = self.full(b) if b is not None else None
+        return None
+
+    def value_helper(self, w, node, base, members):
+        scoped = self.scoped(node)
+        if node.is_abstract:
+            modifier = 2
+        elif node.is_custom:
+            modifier = 1
+        elif node.is_truncatable:
+            modifier = 3
+        else:
+            modifier = 0
+        tc = '%s.TypeCodes.Value(%s.TCKind.tk_value, __id, "%s", %d, %s, new string[] { %s }, new %s[] { %s }, new short[] { %s })' % (
+            RT, CORBA, node.name, modifier,
+            ("%s.type()" % self.helper(base)) if base is not None else "null",
+            ", ".join('"%s"' % m for m, _, _ in members), TC,
+            ", ".join(self.tc_expr(t, node) for _, t, _ in members),
+            ", ".join("1" if public else "0" for _, _, public in members))
+        self.registrations.append('global::Rustorb.Values.Type("%s", %s.type);'
+                                  % (fe.repository_id(node), self.helper(node)))
+
+        def read_body(w):
+            w("var __r = __in.read_value(__id);")
+            w("if (__r != null && __r is not %s) { __in.fail(); return null; }" % scoped)
+            w("return (%s?)__r;" % scoped)
+
+        self.helper_class(w, node, scoped + "?", tc, lambda w: w("__out.write_value(__v);"), read_body)
+
+    def value_box(self, w, node):
+        """A value box: a class with the boxed value as the property value."""
+        name = self.type_name(node)
+        bare = name.lstrip("@")
+        scoped = self.scoped(node)
+        t = fe.type_of(node.boxed_type, node)
+        cst = self.cstype(t, node)
+        d = self.default(t, node)
+        w("/// <summary>The value box %s.</summary>" % node.name)
+        w("public class %s : %s.ValueBase" % (name, CORBA))
+        w("{")
+        w.indent()
+        w('private static readonly string[] __ids = { "%s" };' % fe.repository_id(node))
+        w()
+        w("public %s value { get; set; }%s" % (cst, (" = %s;" % d) if d is not None else ""))
+        w()
+        w("public %s()" % bare)
+        w("{")
+        w("}")
+        w()
+        w("public %s(%s value)" % (bare, cst))
+        w("{")
+        w("    this.value = value;")
+        w("}")
+        w()
+        w("public override string[] _truncatable_ids() => __ids;")
+        w()
+        w("public override void _write(%s __out)" % OUT)
+        w("{")
+        w.indent()
+        self.write(w, t, "this.value", 0, node)
+        w.dedent()
+        w("}")
+        w()
+        w("public override void _read(%s __in)" % IN)
+        w("{")
+        w.indent()
+        self.read(w, t, "this.value", 0, node)
+        w.dedent()
+        w("}")
+        w.dedent()
+        w("}")
+        w()
+        rid = fe.repository_id(node)
+        self.registrations.append('global::Rustorb.Values.Default("%s", () => new %s());' % (rid, scoped))
+        self.registrations.append('global::Rustorb.Values.Type("%s", %s.type);' % (rid, self.helper(node)))
+        tc = '%s.TypeCodes.ValueBox(__id, "%s", %s)' % (RT, node.name, self.tc_expr(t, node))
+
+        def read_body(w):
+            w("var __r = __in.read_value(__id);")
+            w("if (__r != null && __r is not %s) { __in.fail(); return null; }" % scoped)
+            w("return (%s?)__r;" % scoped)
+
+        self.helper_class(w, node, scoped + "?", tc, lambda w: w("__out.write_value(__v);"), read_body)
+
     # interfaces
 
     def bases(self, node):
@@ -1231,65 +1688,61 @@ class CSharpBackend(object):
                 out.append(["op"] + list(o))
         return out
 
-    def interface(self, w, node):
-        self.check_interface(node, node)
-        cls = self.class_name(node)
-        bare = cls.lstrip("@")
-        iname = self.iface_name(node)
-        bases = self.bases(node)
-        for b in bases:
-            self.check_interface(b, node)
-        ops = self.operations(node)
-        members = self.op_members(node, ops)
+    def operations_name(self, node):
+        """The interface with the operations of an interface: I<Name>Operations,
+        or I<Name> itself for an abstract interface."""
+        if self.is_abstract(node):
+            return self.qualify(node, self.iface_name(node))
+        return self.qualify(node, self.iface_name(node) + "Operations")
 
-        # I<Name>Operations
-        ext = [self.qualify(b, self.iface_name(b) + "Operations") for b in bases]
-        w("public interface %sOperations%s" % (iname, (" : " + ", ".join(ext)) if ext else ""))
-        w("{")
-        w.indent()
+    def interface_members(self, w, members, prefix=""):
+        """The operations and attributes of an interface (``members`` from
+        :meth:`op_members`) as declarations."""
         for m in members:
             if m[0] == "attr":
                 _, aname, t, readonly, _, _, d = m
-                w("%s %s { get;%s }" % (self.cstype(t, d), self.member_name(aname),
-                                        "" if readonly else " set;"))
+                w("%s%s %s { get;%s }" % (prefix, self.cstype(t, d), self.member_name(aname),
+                                          "" if readonly else " set;"))
             else:
                 _, opname, method, ret, params, excs, oneway, d = m
                 for e in excs:
                     w('/// <exception cref="%s">%s</exception>' % (self.scoped(e).replace("global::", ""), e.name))
-                w("%s %s(%s);" % (self.cstype(ret, d), self.member_name(method),
-                                  self.params_decl(params, d)))
+                w("%s%s %s(%s);" % (prefix, self.cstype(ret, d), self.member_name(method),
+                                    self.params_decl(params, d)))
+
+    def interface(self, w, node):
+        if self.is_abstract(node):
+            self.abstract_interface(w, node)
+            return
+        cls = self.class_name(node)
+        bare = cls.lstrip("@")
+        iname = self.iface_name(node)
+        bases = self.bases(node)
+        ops = self.operations(node)
+        members = self.op_members(node, ops)
+        local = self.is_local(node)
+
+        # I<Name>Operations (it extends the abstract interfaces the interface
+        # inherits, which have no operations interface)
+        ext = [self.operations_name(b) for b in bases]
+        w("public interface %sOperations%s" % (iname, (" : " + ", ".join(ext)) if ext else ""))
+        w("{")
+        w.indent()
+        self.interface_members(w, members)
         w.dedent()
         w("}")
         w()
         # I<Name>
-        ext = ["%s.IObject" % CORBA] + [self.qualify(b, self.iface_name(b)) for b in bases] + [
-            iname + "Operations"]
+        ext = ["%s.IObject" % CORBA] + [self.qualify(b, self.iface_name(b)) for b in bases
+                                        if not self.is_abstract(b)] + [iname + "Operations"]
         w("public interface %s : %s" % (iname, ", ".join(ext)))
         w("{")
         w("}")
         w()
-        # The class <Name>: the stub, with the nested types and constants.
-        w("/// <summary>The object reference (stub) of %s, and the types and constants" % node.name)
-        w("/// defined in it.</summary>")
-        w("public class %s : %s.Object, %s" % (cls, CORBA, iname))
-        w("{")
-        w.indent()
-        w("public %s(%s.Object reference) : base(reference)" % (bare, CORBA))
-        w("{")
-        w("}")
-        w()
-        w("public override bool _is_a(string logical_type_id) =>")
-        w("    %s || base._is_a(logical_type_id);" % " || ".join(
-            'logical_type_id == "%s"' % i for i in self.ids(node)))
-        for m in self.op_members(node, self.all_operations(node)):
-            w()
-            self.stub_member(w, m)
-        if any(not (fe.is_operation(d) or fe.is_attribute(d)) for d in fe.members_of(node)):
-            w()
-            self.nested(w, node)
-        w.dedent()
-        w("}")
-        w()
+        if local:
+            self.local_interface(w, node, iname)
+            return
+        self.stub_class(w, node, iname)
         scoped_i = self.qualify(node, iname)
         stub = self.qualify(node, cls)
         tc = '%s.TypeCodes.Interface(%s.TCKind.tk_objref, __id, "%s")' % (RT, CORBA, node.name)
@@ -1308,6 +1761,260 @@ class CSharpBackend(object):
             extra=narrow,
         )
         self.skeleton(w, node)
+        self.tie(w, node)
+
+    def local_interface(self, w, node, iname):
+        """A local interface: the abstract class <Name> on Corba.LocalObject
+        that implementations derive from (with the nested types and
+        constants), and the helper. Local objects are never sent, so the
+        helper's write and read raise MARSHAL (minor 4)."""
+        cls = self.class_name(node)
+        bare = cls.lstrip("@")
+        scoped_i = self.qualify(node, iname)
+        w("/// <summary>The base of the implementations of the local interface %s, and" % node.name)
+        w("/// the types and constants defined in it.</summary>")
+        w("public abstract class %s : %s.LocalObject, %s" % (cls, CORBA, iname))
+        w("{")
+        w.indent()
+        w("private static readonly string[] __ids = { %s };" % ", ".join('"%s"' % i for i in self.ids(node)))
+        w()
+        w("protected override string[] _ids() => (string[])__ids.Clone();")
+        for m in self.op_members(node, self.all_operations(node)):
+            w()
+            if m[0] == "attr":
+                _, aname, t, readonly, _, _, d = m
+                w("public abstract %s %s { get;%s }" % (self.cstype(t, d), self.member_name(aname),
+                                                       "" if readonly else " set;"))
+            else:
+                _, opname, method, ret, params, excs, oneway, d = m
+                w("public abstract %s %s(%s);" % (self.cstype(ret, d), self.member_name(method),
+                                                  self.params_decl(params, d)))
+        if any(not (fe.is_operation(d) or fe.is_attribute(d)) for d in fe.members_of(node)):
+            w()
+            self.nested(w, node)
+        w.dedent()
+        w("}")
+        w()
+        tc = '%s.TypeCodes.Interface(%s.TCKind.tk_local_interface, __id, "%s")' % (RT, CORBA, node.name)
+        marshal = 'throw new %s.MARSHAL("a local object cannot be sent", 4, %s.CompletionStatus.COMPLETED_NO);' % (
+            CORBA, CORBA)
+
+        def narrow(w):
+            w("public static %s? narrow(object? obj) => obj switch" % scoped_i)
+            w("{")
+            w("    null => null,")
+            w("    %s i => i," % scoped_i)
+            w('    _ => throw new %s.BAD_PARAM("not a %s", 0, %s.CompletionStatus.COMPLETED_NO),'
+              % (CORBA, node.name, CORBA))
+            w("};")
+            w()
+            w("public static %s? unchecked_narrow(object? obj) => narrow(obj);" % scoped_i)
+
+        self.helper_class(
+            w, node, scoped_i + "?", tc,
+            lambda w: w(marshal),
+            lambda w: w(marshal),
+            extra=narrow,
+        )
+
+    def stub_class(self, w, node, iname):
+        """The class <Name>: the stub, with the nested types and constants."""
+        cls = self.class_name(node)
+        bare = cls.lstrip("@")
+        w("/// <summary>The object reference (stub) of %s, and the types and constants" % node.name)
+        w("/// defined in it.</summary>")
+        w("public class %s : %s.Object, %s" % (cls, CORBA, iname))
+        w("{")
+        w.indent()
+        w("public %s(%s.Object reference) : base(reference)" % (bare, CORBA))
+        w("{")
+        w("}")
+        w()
+        w("public override bool _is_a(string logical_type_id) =>")
+        w("    %s || base._is_a(logical_type_id);" % " || ".join(
+            'logical_type_id == "%s"' % i for i in self.ids(node)))
+        for m in self.op_members(node, self.all_operations(node)):
+            w()
+            self.stub_member(w, m)
+        if not self.is_abstract(node):
+            seen = set()
+            for n in [node] + [self.full(a) for a in self.ancestors(node)]:
+                if self.is_abstract(n):
+                    continue
+                for sendc in cxx_backend.CxxBackend.sendc_operations(self, n):
+                    if sendc[0] in seen:
+                        continue
+                    seen.add(sendc[0])
+                    w()
+                    self.sendc_method(w, n, sendc)
+        if any(not (fe.is_operation(d) or fe.is_attribute(d)) for d in fe.members_of(node)):
+            w()
+            self.nested(w, node)
+        w.dedent()
+        w("}")
+        w()
+
+    # -Wbami
+
+    def sendc_signature(self, node, sendc):
+        name, _, op, ins = sendc
+        d = op[6]
+        handler = self.scoped(fe.handler_of(node))
+        args = ["%s? ami_handler" % handler]
+        args += ["%s %s" % (self.cstype(t, d), self.param_name(p)) for p, t in ins]
+        return "void %s(%s)" % (self.member_name(name), ", ".join(args))
+
+    def sendc_method(self, w, node, sendc):
+        """A sendc_ operation of the stub: the arguments are copied (the
+        runtime writes them later, maybe more than once); the reply is read
+        into locals that the call of the handler passes on."""
+        _, reply, op, ins = sendc
+        opname, _, ret, params, excs, _, d = op
+        outs = [(p, t) for p, t, dr in params if dr in ("inout", "out")]
+        w("public %s" % self.sendc_signature(node, sendc))
+        w("{")
+        w.indent()
+        for p, t in ins:
+            w("var __a_%s = %s;" % (p, self.copy(t, self.param_name(p), d)))
+        results = []
+        if ret.kind != "void":
+            results.append(("__r", ret))
+        results += [("__o_" + p, t) for p, t in outs]
+        for v, t in results:
+            w("%s %s = default!;" % (self.cstype(t, d), v))
+        w('%s.Ami.Sendc(this, "%s", ami_handler,' % (RT, opname))
+        w.indent()
+        if ins:
+            w("__out =>")
+            w("{")
+            w.indent()
+            for p, t in ins:
+                self.write(w, t, "__a_" + p, 0, d)
+            w.dedent()
+            w("},")
+        else:
+            w("null,")
+        if results:
+            w("__in =>")
+            w("{")
+            w.indent()
+            for v, t in results:
+                self.read(w, t, v, 0, d)
+            w.dedent()
+            w("},")
+        else:
+            w("null,")
+        if excs:
+            w("(__id, __in) =>")
+            w("{")
+            w.indent()
+            for e in excs:
+                h = self.helper(e)
+                w("if (__id == %s.id()) return %s.read(__in);" % (h, h))
+            w("return null;")
+            w.dedent()
+            w("},")
+        else:
+            w("null,")
+        w("() => ami_handler!.%s(%s)," % (self.member_name(reply), ", ".join(v for v, _ in results)))
+        w("__h => ami_handler!.%s(__h));" % self.member_name(reply + "_excep"))
+        w.dedent()
+        w.dedent()
+        w("}")
+
+    def abstract_interface(self, w, node):
+        """An abstract interface A: the interface IA with the operations,
+        which stubs (the class A, for references received as A) and values
+        (of valuetypes that support it) implement."""
+        cls = self.class_name(node)
+        iname = self.iface_name(node)
+        bases = self.bases(node)
+        ext = [self.qualify(b, self.iface_name(b)) for b in bases]
+        w("public interface %s%s" % (iname, (" : " + ", ".join(ext)) if ext else ""))
+        w("{")
+        w.indent()
+        self.interface_members(w, self.op_members(node, self.operations(node)))
+        w.dedent()
+        w("}")
+        w()
+        self.stub_class(w, node, iname)
+        scoped_i = self.qualify(node, iname)
+        stub = self.qualify(node, cls)
+        tc = '%s.TypeCodes.Interface(%s.TCKind.tk_abstract_interface, __id, "%s")' % (RT, CORBA, node.name)
+
+        def narrow(w):
+            # An object or a value: a reference becomes a stub, a value must
+            # implement the interface.
+            for checked in (True, False):
+                w("public static %s? %s(object? obj)" % (scoped_i, "narrow" if checked else "unchecked_narrow"))
+                w("{")
+                w.indent()
+                w("if (obj == null) return null;")
+                w("if (obj is %s __n) return __n;" % scoped_i)
+                w("if (obj is not %s.Object __o)" % CORBA)
+                w("    throw new %s.BAD_PARAM(\"neither a reference nor a value of %s\", 0, %s.CompletionStatus.COMPLETED_NO);"
+                  % (CORBA, node.name, CORBA))
+                if checked:
+                    w("return %s.Stubs.Narrow<%s>(__o, __id, o => new %s(o));" % (RT, scoped_i, stub))
+                else:
+                    w("return new %s(__o);" % stub)
+                w.dedent()
+                w("}")
+                if checked:
+                    w()
+
+        self.helper_class(
+            w, node, scoped_i + "?", tc,
+            lambda w: w("__out.write_abstract(__v);"),
+            lambda w: w("return unchecked_narrow(__in.read_abstract());"),
+            extra=narrow,
+        )
+
+    def tie(self, w, node):
+        """<Name>POATie: a servant that forwards to an implementation of
+        I<Name>Operations (a valuetype that supports the interface, say)."""
+        cls = self.class_name(node).lstrip("@")
+        ops_i = self.qualify(node, self.iface_name(node) + "Operations")
+        w("/// <summary>The servant of %s that delegates to an implementation of its operations.</summary>"
+          % node.name)
+        w("public class %sPOATie : %sPOA" % (cls, cls))
+        w("{")
+        w.indent()
+        w("private %s __impl;" % ops_i)
+        w()
+        w("public %sPOATie(%s impl)" % (cls, ops_i))
+        w("{")
+        w("    __impl = impl;")
+        w("}")
+        w()
+        w("public %s _delegate" % ops_i)
+        w("{")
+        w("    get => __impl;")
+        w("    set => __impl = value;")
+        w("}")
+        for m in self.op_members(node, self.all_operations(node)):
+            w()
+            if m[0] == "attr":
+                _, aname, t, readonly, _, _, d = m
+                n = self.member_name(aname)
+                w("public override %s %s" % (self.cstype(t, d), n))
+                w("{")
+                w("    get => __impl.%s;" % n)
+                if not readonly:
+                    w("    set => __impl.%s = value;" % n)
+                w("}")
+            else:
+                _, opname, method, ret, params, excs, oneway, d = m
+                args = []
+                for p, t, dr in params:
+                    pre = "" if dr == "in" else ("ref " if dr == "inout" else "out ")
+                    args.append(pre + self.param_name(p))
+                w("public override %s %s(%s) =>" % (self.cstype(ret, d), self.member_name(method),
+                                                    self.params_decl(params, d)))
+                w("    __impl.%s(%s);" % (self.member_name(method), ", ".join(args)))
+        w.dedent()
+        w("}")
+        w()
 
     def call(self, w, opname, oneway, ret, params, excs, d, target="this"):
         """The body of a stub method: Stubs.Invoke with lambdas, through

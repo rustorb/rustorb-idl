@@ -39,8 +39,10 @@ IDLS = [
     os.path.join(INTEROP_IDL, "PoaProbe.idl"),
     os.path.join(CPP_IDL, "CxxMapping.idl"),
     os.path.join(TEST_IDL, "CosNaming.idl"),
+    os.path.join(TEST_IDL, "LocalTest.idl"),
+    os.path.join(CPP_IDL, "Idl4.idl"),
 ]
-NAMES = ("InteropTest", "AnyTest", "PoaProbe", "CxxMapping", "CosNaming")
+NAMES = ("InteropTest", "AnyTest", "PoaProbe", "CxxMapping", "CosNaming", "LocalTest", "Idl4")
 
 
 def tearDownModule():
@@ -149,18 +151,87 @@ class CBackendTest(unittest.TestCase):
         c = self.c("AnyTest")
         self.assertIn("const rustorb_c_type AnyTest_Node__desc = {", c)
 
-    def test_options(self):
+    def test_local_interfaces(self):
+        h, c = self.h("LocalTest"), self.c("LocalTest")
+        # The stubs and the implementation structs, as for an interface.
+        self.assertIn("typedef CORBA_Object LocalTest_Greeter;", h)
+        self.assertIn("CORBA_char* LocalTest_Loud_greet(LocalTest_Loud _obj, const CORBA_char* who, "
+                      "CORBA_Environment* _ev);", h)
+        self.assertIn("typedef struct POA_LocalTest_Loud__vepv {", h)
+        self.assertIn("LocalTest_Loud LocalTest_Loud__create(PortableServer_Servant impl, "
+                      "CORBA_Environment* _ev);", h)
+        # No servant of the ORB: rustorb_c_local_init; tk_local_interface.
+        self.assertIn("rustorb_c_local_init(_servant, &_rustorb_cls_LocalTest_Loud, _ev);", c)
+        self.assertIn("rustorb_c_servant_init(_servant, &_rustorb_cls_LocalTest_Remote, _ev);", c)
+        self.assertIn("const rustorb_c_type LocalTest_Greeter__desc = {CORBA_tk_local_interface,", c)
+        self.assertNotIn("LocalTest_Remote__create", h)
+
+    def test_ami(self):
+        # -Wbami: the handlers, with Messaging from <rustorb/messaging.h>,
+        # and the sendc_ functions after each handler.
+        outdir = os.path.join(OUT, "ami")
         path = os.path.join(INTEROP_IDL, "InteropTest.idl")
-        self.assertEqual(cli.main(["-bc", "-Wbami", "-C", OUT, path]), 2)
+        self.assertEqual(cli.main(["-bc", "-Wbami", "-C", outdir, path]), 0)
+        h = read(os.path.join(outdir, "InteropTest.h"))
+        c = read(os.path.join(outdir, "InteropTest.c"))
+        self.assertIn("#include <rustorb/messaging.h>", h)
+        self.assertNotIn('#include "Messaging.h"', h)
+        self.assertIn("typedef CORBA_Object InteropTest_AMI_EchoHandler;", h)
+        self.assertIn("  POA_Messaging_ReplyHandler__epv* Messaging_ReplyHandler_epv;", h)
+        self.assertIn("  void (*divide)(PortableServer_Servant _servant, CORBA_long ami_return_val, "
+                      "CORBA_long remainder, CORBA_Environment* _ev);", h)
+        self.assertIn("  void (*divide_excep)(PortableServer_Servant _servant, "
+                      "const Messaging_ExceptionHolder* excep_holder, CORBA_Environment* _ev);", h)
+        self.assertIn("void InteropTest_Echo_sendc_swap(InteropTest_Echo _obj, "
+                      "InteropTest_AMI_EchoHandler ami_handler, CORBA_long a, CORBA_long b, "
+                      "CORBA_Environment* _ev);", h)
+        self.assertIn("void InteropTest_Echo_sendc_set_counter(InteropTest_Echo _obj, "
+                      "InteropTest_AMI_EchoHandler ami_handler, CORBA_long attr_counter, "
+                      "CORBA_Environment* _ev);", h)
+        # After the handler, whose operations it names.
+        self.assertLess(h.index("extern const rustorb_c_operation InteropTest_AMI_EchoHandler__op_swap;"),
+                        h.index("InteropTest_Echo_sendc_swap("))
+        self.assertIn("  rustorb_c_sendc(_obj, &InteropTest_Echo__op__get_counter, NULL, ami_handler, "
+                      "&InteropTest_AMI_EchoHandler__op_get_counter, "
+                      "&InteropTest_AMI_EchoHandler__op_get_counter_excep, _ev);", c)
+        self.assertIn('"IDL:omg.org/Messaging/ReplyHandler:1.0"', c)
+        self.assertIn("&Messaging_ExceptionHolder__desc", c)
+        if CC:
+            r = subprocess.run(
+                [CC, "-std=c99", "-Wall", "-Wextra", "-Wpedantic", "-Werror", "-fsyntax-only",
+                 "-I", outdir, "-I", RUNTIME, "-I", FFI, os.path.join(outdir, "InteropTest.c")],
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(r.returncode, 0, r.stderr[-4000:])
+
+    def test_idl4(self):
+        # int8, bitmask and bitset: the integer that holds the bits, with
+        # constants and field macros (rustorb#187).
+        h = read(os.path.join(self.outdir, "Idl4.h"))
+        self.assertIn("#define Idl4_SMALLEST ((CORBA_int8)-128)", h)
+        self.assertIn("typedef CORBA_octet Idl4_Flags;", h)
+        self.assertIn("#define Idl4_Flags__desc CORBA_octet__desc", h)
+        self.assertIn("#define TC_Idl4_Flags TC_octet", h)
+        self.assertIn("#define Idl4_WRITE ((Idl4_Flags)(1U << 3))", h)
+        self.assertIn("typedef CORBA_unsigned_long_long Idl4_Wide;", h)
+        self.assertIn("#define Idl4_HIGH ((Idl4_Wide)(1ULL << 39))", h)
+        self.assertIn("typedef CORBA_unsigned_short Idl4_Header;", h)
+        self.assertIn("#define Idl4_Header_kind(v) ((CORBA_octet)", h)
+        self.assertIn("#define Idl4_Header_set_last(p, x)", h)
+        # Signed bitfields are sign-extended.
+        self.assertIn("#define Idl4_Header_delta(v) ((CORBA_short)(CORBA_long_long)", h)
+        self.assertIn("  CORBA_int8 offset;", h)
+        self.assertIn("RUSTORB_C_SEQUENCE(CORBA_sequence_int8, CORBA_int8);", h)
 
     def test_unsupported(self):
-        # rustorb#187: valuetypes, abstract and local interfaces; and the
-        # IDL 4 bitmask and bitset.
+        # Valuetypes and abstract interfaces have no C mapping; bitset
+        # inheritance is not supported.
         cases = {
             "valuetype": "module U { valuetype V { public long x; }; };",
             "abstract": "module U { abstract interface A { void a(); }; };",
-            "local": "module U { local interface L { void a(); }; };",
-            "bitmask": "module U { bitmask B { X, Y }; };",
+            "bitset_base": "module U { bitset A { bitfield<2> a; }; "
+                           "bitset B : A { bitfield<2> b; }; };",
         }
         for name, text in cases.items():
             with self.subTest(name):

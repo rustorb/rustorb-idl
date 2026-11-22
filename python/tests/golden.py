@@ -40,6 +40,9 @@ CASES = [
     ("c", ["-bc"], "cpp/CxxMapping.idl"),
     ("c", ["-bc"], "CosNaming.idl"),
     ("c", ["-bc"], "interop/InteropTest.idl"),
+    ("ruby", ["-bruby"], "cpp/CxxMapping.idl"),
+    ("ruby", ["-bruby"], "CosNaming.idl"),
+    ("ruby", ["-bruby"], "interop/InteropTest.idl"),
 ]
 
 
