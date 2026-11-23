@@ -45,6 +45,8 @@ CASES = [
     ("ruby", ["-bruby"], "cpp/CxxMapping.idl"),
     ("ruby", ["-bruby"], "CosNaming.idl"),
     ("ruby", ["-bruby"], "interop/InteropTest.idl"),
+    ("ruby", ["-bruby", "-Wbdds_only"], "DdsMapping.idl"),
+    ("ruby", ["-bruby", "-Wbdds"], "DdsCorba.idl"),
 ]
 
 

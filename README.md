@@ -13,7 +13,7 @@ Java (`-bjava`, with the DDS types for rustorb-dds's Java binding of
 `-Wbdds` / `-Wbdds_only`) and C# (`-bcsharp`, the IDL4 to C# mapping for
 rustorb's .NET binding; `-Wbdotnet_naming` for the .NET naming scheme; with
 the DDS types for rustorb-dds's .NET binding of `-Wbdds` / `-Wbdds_only`), C
-(`-bc`, the OMG C Language Mapping for rustorb's C binding, librustorb_c) and Ruby (`-bruby`, the OMG Ruby Language Mapping for rustorb's Ruby binding, the `rustorb` gem). With `-brust -Wbdds_only -Wbxtypes`, the
+(`-bc`, the OMG C Language Mapping for rustorb's C binding, librustorb_c) and Ruby (`-bruby`, the OMG Ruby Language Mapping for rustorb's Ruby binding, the `rustorb` gem, with the DDS types for rustorb-dds's Ruby binding of `-Wbdds` / `-Wbdds_only`). With `-brust -Wbdds_only -Wbxtypes`, the
 `@DDSService` interfaces get clients and servers of DDS-RPC for rustorb-dds
 ([docs/dds-rpc.md](docs/dds-rpc.md)).
 
@@ -45,6 +45,8 @@ PYTHONPATH=path/to/idl_parser python3 -m unittest discover -s python/tests
   own CI runs its runtime tests with the version of the generator it pins.
   The C++ DDS output is compiled when `RUSTORB_DDS_SRC` names a checkout of
   rustorb/rustorb-dds with the C++ binding (`cpp/include`).
+  The Ruby DDS output is loaded and round-tripped when that checkout's
+  gem extension is built (`cd ruby && rake compile`).
 - `tests/idl/interop/` and `tests/idl/cpp/` are copies of rustorb's
   `interop/idl/` and `cpp/tests/idl/`.
 

@@ -39,9 +39,11 @@ The options follow omniidl where they mean the same thing:
                     Foo_dds.hh, for rustorb-dds's C++ binding; java: a
                     class <Name>Codec per type, for rustorb-dds's Java
                     binding; csharp: Foo_dds.cs, a class <Name>Codec per
-                    type, for rustorb-dds's .NET binding Rustorb.Dds)
+                    type, for rustorb-dds's .NET binding Rustorb.Dds; ruby:
+                    Foo_dds.rb, _dds_type on each type, for rustorb-dds's
+                    gem)
   -Wbdds_only       write the DDS type support only, without the CORBA code
-                    (rust, python, c++11, java, csharp); @optional, @external, @value, int8
+                    (rust, python, c++11, java, csharp, ruby); @optional, @external, @value, int8
                     and bitmask can then be used
   -Wbtypesupport=PATH
                     the path of rustorb-typesupport (rust, default
@@ -56,7 +58,7 @@ The options follow omniidl where they mean the same thing:
   -Wbextensibility=KIND
                     the extensibility of types without @final, @appendable
                     or @mutable: final, appendable (the default) or mutable
-                    (rust, python, c++11, java, csharp; DDS)
+                    (rust, python, c++11, java, csharp, ruby; DDS)
 
 The standard IDL files that come with rustorb-idl (CosNaming.idl, Messaging.idl, dds_rpc.idl) are in the
 directory `rustorb-idl --idl-dir` prints, which is also searched for
@@ -79,6 +81,7 @@ from . import java_backend
 from . import python_backend
 from . import python_dds
 from . import ruby_backend
+from . import ruby_dds
 from . import rust_backend
 
 
@@ -171,9 +174,9 @@ def main(argv=None):
             options.dotnet_naming = True
         elif backend is rust_backend and opt == "bno_rustfmt":
             options.rustfmt = False
-        elif backend in (rust_backend, python_backend, cxx_backend, java_backend, csharp_backend) and opt == "bdds":
+        elif backend in (rust_backend, python_backend, cxx_backend, java_backend, csharp_backend, ruby_backend) and opt == "bdds":
             options.dds = True
-        elif backend in (rust_backend, python_backend, cxx_backend, java_backend, csharp_backend) and opt == "bdds_only":
+        elif backend in (rust_backend, python_backend, cxx_backend, java_backend, csharp_backend, ruby_backend) and opt == "bdds_only":
             options.dds_only = True
         elif backend is rust_backend and opt == "bxtypes":
             options.xtypes = "::rustorb_xtypes"
@@ -181,7 +184,7 @@ def main(argv=None):
             options.xtypes = opt[len("bxtypes=") :]
         elif backend is rust_backend and opt.startswith("btypesupport="):
             options.typesupport = opt[len("btypesupport=") :]
-        elif backend in (rust_backend, python_backend, cxx_backend, java_backend, csharp_backend) and opt.startswith(
+        elif backend in (rust_backend, python_backend, cxx_backend, java_backend, csharp_backend, ruby_backend) and opt.startswith(
             "bextensibility="
         ):
             kind = opt[len("bextensibility=") :].lower()
@@ -203,7 +206,7 @@ def main(argv=None):
     for path in args.files:
         try:
             giop = not (
-                backend in (rust_backend, python_backend, cxx_backend, java_backend, csharp_backend) and options.dds_only
+                backend in (rust_backend, python_backend, cxx_backend, java_backend, csharp_backend, ruby_backend) and options.dds_only
             )
             rpc = backend is rust_backend and options.dds_only
             spec = frontend.load(
@@ -224,6 +227,10 @@ def main(argv=None):
                     continue
             if backend is csharp_backend and (options.dds or options.dds_only):
                 csharp_dds.write_outputs(spec, args.outdir, options)
+                if options.dds_only:
+                    continue
+            if backend is ruby_backend and (options.dds or options.dds_only):
+                ruby_dds.write_outputs(spec, args.outdir, options)
                 if options.dds_only:
                     continue
             if backend is python_backend:

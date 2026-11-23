@@ -131,7 +131,13 @@ class Writer(cxx_backend.Writer):
 
 
 class Options(object):
-    pass
+    def __init__(self):
+        # -Wbdds / -Wbdds_only: also (or only) write the DDS type support
+        # (ruby_dds.py, for rustorb-dds's Ruby binding).
+        self.dds = False
+        self.dds_only = False
+        # -Wbextensibility: the extensibility of types without an annotation.
+        self.extensibility = "appendable"
 
 
 def const_name(name):

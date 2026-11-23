@@ -22,6 +22,19 @@ rustorb/rustorb; see its CHANGELOG.md for them.
   `-Wbextensibility` sets the extensibility of types without an
   annotation. Struct inheritance, maps, recursive types, bitsets and
   forward declarations are refused.
+- Ruby: `-Wbdds` / `-Wbdds_only` write `Foo_dds.rb`, the DDS type support
+  of `Foo.idl` for rustorb-dds's Ruby binding, the `rustorb-dds` gem
+  (rustorb/rustorb-dds#92, #17). Each struct, union, enum, bitmask and
+  typedef gets `self._dds_type`, which describes the DDS-XTypes type to
+  `DDS::Types` as the other back ends do (so the TypeObjects match).
+  `-Wbdds_only` also writes the types and constants themselves, without
+  CORBA: structs are `DDS::Struct` subclasses with `MEMBERS` and
+  `DEFAULTS`, unions `DDS::Union` subclasses with an accessor per member,
+  enums modules of their `@value`s, bitmasks modules of bit values;
+  `-Wbdds` adds `_dds_type` to the classes of `-bruby`. `-Wbextensibility`
+  sets the extensibility of types without an annotation. Struct
+  inheritance, mutable unions, recursive types, bitsets and forward
+  declarations are refused.
 
 ## [0.5.0] - 2026-11-22
 
