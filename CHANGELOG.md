@@ -6,6 +6,23 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ## [Unreleased]
 
+### Added
+
+- C#: `-Wbdds` / `-Wbdds_only` write `Foo_dds.cs`, the DDS type support of
+  the structs, unions, enums, bitmasks and typedefs of `Foo.idl` for
+  rustorb-dds's .NET binding `Rustorb.Dds` (rustorb/rustorb-dds#93,
+  #18): a class `<Name>Codec` per type, whose `DdsType()` builds the
+  DDS-XTypes type as the other back ends describe it (so the TypeObjects
+  match), and whose `Instance` (`Rustorb.Dds.ICodec<T>`) writes and reads
+  the values; a `ModuleInitializer` registers the struct and union codecs
+  with `Rustorb.Dds.TypeSupport`. `-Wbdds_only` writes `Foo.cs` with only
+  the types and constants, in the shape of `-bcsharp`, and no CORBA:
+  `@optional` members are nullable, `@external` members plain, enums take
+  their `@value`s, `int8` is `sbyte`, bitmasks are `[Flags]` enums.
+  `-Wbextensibility` sets the extensibility of types without an
+  annotation. Struct inheritance, maps, recursive types, bitsets and
+  forward declarations are refused.
+
 ## [0.5.0] - 2026-11-22
 
 Three new back ends: `-bcsharp` (IDL4 to C#), `-bc` (the C mapping) and
