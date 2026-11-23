@@ -6,6 +6,36 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ## [Unreleased]
 
+### Added
+
+- C#: `-Wbdds` / `-Wbdds_only` write `Foo_dds.cs`, the DDS type support of
+  the structs, unions, enums, bitmasks and typedefs of `Foo.idl` for
+  rustorb-dds's .NET binding `Rustorb.Dds` (rustorb/rustorb-dds#93,
+  #18): a class `<Name>Codec` per type, whose `DdsType()` builds the
+  DDS-XTypes type as the other back ends describe it (so the TypeObjects
+  match), and whose `Instance` (`Rustorb.Dds.ICodec<T>`) writes and reads
+  the values; a `ModuleInitializer` registers the struct and union codecs
+  with `Rustorb.Dds.TypeSupport`. `-Wbdds_only` writes `Foo.cs` with only
+  the types and constants, in the shape of `-bcsharp`, and no CORBA:
+  `@optional` members are nullable, `@external` members plain, enums take
+  their `@value`s, `int8` is `sbyte`, bitmasks are `[Flags]` enums.
+  `-Wbextensibility` sets the extensibility of types without an
+  annotation. Struct inheritance, maps, recursive types, bitsets and
+  forward declarations are refused.
+- Ruby: `-Wbdds` / `-Wbdds_only` write `Foo_dds.rb`, the DDS type support
+  of `Foo.idl` for rustorb-dds's Ruby binding, the `rustorb-dds` gem
+  (rustorb/rustorb-dds#92, #17). Each struct, union, enum, bitmask and
+  typedef gets `self._dds_type`, which describes the DDS-XTypes type to
+  `DDS::Types` as the other back ends do (so the TypeObjects match).
+  `-Wbdds_only` also writes the types and constants themselves, without
+  CORBA: structs are `DDS::Struct` subclasses with `MEMBERS` and
+  `DEFAULTS`, unions `DDS::Union` subclasses with an accessor per member,
+  enums modules of their `@value`s, bitmasks modules of bit values;
+  `-Wbdds` adds `_dds_type` to the classes of `-bruby`. `-Wbextensibility`
+  sets the extensibility of types without an annotation. Struct
+  inheritance, mutable unions, recursive types, bitsets and forward
+  declarations are refused.
+
 ## [0.5.0] - 2026-11-22
 
 Three new back ends: `-bcsharp` (IDL4 to C#), `-bc` (the C mapping) and

@@ -37,12 +37,16 @@ CASES = [
     ("csharp", ["-bcsharp"], "cpp/CxxMapping.idl"),
     ("csharp", ["-bcsharp"], "CosNaming.idl"),
     ("csharp", ["-bcsharp", "-Wbdotnet_naming"], "interop/InteropTest.idl"),
+    ("csharp", ["-bcsharp", "-Wbdds_only"], "DdsMapping.idl"),
+    ("csharp", ["-bcsharp", "-Wbdds"], "DdsCorba.idl"),
     ("c", ["-bc"], "cpp/CxxMapping.idl"),
     ("c", ["-bc"], "CosNaming.idl"),
     ("c", ["-bc"], "interop/InteropTest.idl"),
     ("ruby", ["-bruby"], "cpp/CxxMapping.idl"),
     ("ruby", ["-bruby"], "CosNaming.idl"),
     ("ruby", ["-bruby"], "interop/InteropTest.idl"),
+    ("ruby", ["-bruby", "-Wbdds_only"], "DdsMapping.idl"),
+    ("ruby", ["-bruby", "-Wbdds"], "DdsCorba.idl"),
 ]
 
 

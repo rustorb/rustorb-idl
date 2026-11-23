@@ -216,6 +216,12 @@ class Options(object):
         # -Wbdotnet_naming: the .NET naming scheme (7.1.1.2) instead of the
         # IDL one.
         self.dotnet_naming = False
+        # -Wbdds / -Wbdds_only: also (or only) write the DDS type support
+        # (csharp_dds.py, for rustorb-dds's .NET binding).
+        self.dds = False
+        self.dds_only = False
+        # -Wbextensibility: the extensibility of types without an annotation.
+        self.extensibility = "appendable"
 
 
 class CSharpBackend(object):
