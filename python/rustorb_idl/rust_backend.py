@@ -213,6 +213,9 @@ class Options(object):
         self.xtypes = None
         # The path of rustorb-dds, for the DDS services (DDS-RPC).
         self.rustorb_dds = "::rustorb_dds"
+        # Whether `sequence<octet>` is the core's shared `Octets` instead
+        # of `Vec<u8>` (-Wbshared_octets).
+        self.shared_octets = False
 
 
 class Writer(cxx_backend.Writer):
@@ -397,9 +400,22 @@ class RustBackend(DdsMixin, RpcMixin):
                 "%s is not supported by the Rust backend yet" % UNSUPPORTED[t.kind], where
             )
 
+    def is_shared_octets(self, t):
+        """Whether ``t`` itself (not a typedef of it) is a
+        ``sequence<octet>`` mapped to the shared ``Octets``
+        (-Wbshared_octets): unbounded ones only."""
+        return (
+            self.opt.shared_octets
+            and t.kind == "sequence"
+            and not t.bound
+            and t.content.kind == "octet"
+        )
+
     def rtype(self, t, cur, where=None):
         """The Rust type of the values of ``t``."""
         k = t.kind
+        if self.is_shared_octets(t):
+            return self.R + "::Octets"
         if self.dds and k == "int8":
             return "i8"
         if self.dds and k == "bitmask":
@@ -444,6 +460,8 @@ class RustBackend(DdsMixin, RpcMixin):
         """The descriptor (an IdlType) of ``t``."""
         k = t.kind
         I = self.I
+        if self.is_shared_octets(t):
+            return I + "::SharedOctets"
         self.unsupported(t, where)
         if k in BASIC:
             return "%s::%s" % (I, BASIC[k][1])
@@ -492,6 +510,9 @@ class RustBackend(DdsMixin, RpcMixin):
             return "value"
         if r.kind in ("string", "wstring"):
             return "str"
+        if self.is_shared_octets(r):
+            # `&Octets`, which a large one is sent from without a copy.
+            return "borrow"
         if r.kind == "sequence":
             return "slice"
         if r.kind == "Object":

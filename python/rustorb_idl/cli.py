@@ -30,6 +30,10 @@ The options follow omniidl where they mean the same thing:
                     the Rust path PATH instead of writing them (rust)
   -Wbcore=PATH      the path of rustorb-core (rust, default ::rustorb_core)
   -Wbno_rustfmt     do not pass the output through rustfmt (rust)
+  -Wbshared_octets  map sequence<octet> (unbounded) to rustorb-core's
+                    shared Octets instead of Vec<u8>: a large one is
+                    received and sent without being copied (rust; needs
+                    rustorb-core 0.8; not with -Wbdds or -Wbdds_only)
   -Wbdotnet_naming  the .NET naming scheme of IDL4 to C# 7.1.1.2 (PascalCase
                     types and members, I prefix on interfaces) instead of the
                     IDL naming scheme (csharp)
@@ -174,6 +178,8 @@ def main(argv=None):
             options.dotnet_naming = True
         elif backend is rust_backend and opt == "bno_rustfmt":
             options.rustfmt = False
+        elif backend is rust_backend and opt == "bshared_octets":
+            options.shared_octets = True
         elif backend in (rust_backend, python_backend, cxx_backend, java_backend, csharp_backend, ruby_backend) and opt == "bdds":
             options.dds = True
         elif backend in (rust_backend, python_backend, cxx_backend, java_backend, csharp_backend, ruby_backend) and opt == "bdds_only":
@@ -195,6 +201,9 @@ def main(argv=None):
         else:
             sys.stderr.write("rustorb-idl: unknown option -W%s\n" % opt)
             return 2
+    if backend is rust_backend and options.shared_octets and (options.dds or options.dds_only):
+        sys.stderr.write("rustorb-idl: -Wbshared_octets is not for -Wbdds or -Wbdds_only\n")
+        return 2
     if backend is rust_backend and options.xtypes and not (options.dds or options.dds_only):
         sys.stderr.write("rustorb-idl: -Wbxtypes needs -Wbdds or -Wbdds_only\n")
         return 2
