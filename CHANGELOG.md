@@ -6,6 +6,8 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-27
+
 ### Added
 
 - Rust: `-Wbshared_octets` maps an unbounded `sequence<octet>` (typedefs
