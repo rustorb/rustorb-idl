@@ -8,6 +8,13 @@ rustorb/rustorb; see its CHANGELOG.md for them.
 
 ### Added
 
+- Rust: `-Wbshared_octets` maps an unbounded `sequence<octet>` (typedefs
+  and members too) to rustorb-core's shared `Octets` (descriptor
+  `idl::SharedOctets`) instead of `Vec<u8>`, and its `in` arguments to
+  `&Octets`: a large one is received without being copied out of the
+  message and sent without being copied into it (rustorb/rustorb#211).
+  Needs a rustorb-core with `idl::SharedOctets`; not with `-Wbdds` or
+  `-Wbdds_only`. The default mapping is unchanged.
 - C#: `-Wbdds` / `-Wbdds_only` write `Foo_dds.cs`, the DDS type support of
   the structs, unions, enums, bitmasks and typedefs of `Foo.idl` for
   rustorb-dds's .NET binding `Rustorb.Dds` (rustorb/rustorb-dds#93,

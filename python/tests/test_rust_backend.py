@@ -132,6 +132,50 @@ class RustBackendTest(unittest.TestCase):
         self.assertEqual(cli.main(["-brust", "-Wbno_rustfmt", "-C", outdir, path]), 0)
         self.assertIn("pub struct Echo(", read(os.path.join(outdir, "interop_test.rs")))
 
+    def test_shared_octets(self):
+        path = write_idl(
+            "SharedOctets.idl",
+            """
+            module SharedTest {
+              typedef sequence<octet> Blob;
+              typedef sequence<octet, 8> Small;
+              struct Frame {
+                Blob data;
+                sequence<octet> raw;
+                Small tag;
+                sequence<sequence<octet> > parts;
+              };
+              interface Store {
+                Blob get(in unsigned long n);
+                void put(in Blob v, out Blob old, inout sequence<octet> both);
+                Frame frame(in Frame f);
+              };
+            };
+            """,
+        )
+        outdir = os.path.join(OUT, "shared")
+        self.assertEqual(cli.main(["-brust", "-Wbshared_octets", "-C", outdir, path]), 0)
+        text = read(os.path.join(outdir, "shared_octets.rs"))
+        self.assertIn("pub type Blob = ::rustorb_core::Octets;", text)
+        self.assertIn("pub raw: ::rustorb_core::Octets,", text)
+        self.assertIn("pub parts: ::std::vec::Vec<::rustorb_core::Octets>,", text)
+        # Bounded ones stay Vec<u8>.
+        self.assertIn("pub type Small = ::std::vec::Vec<u8>;", text)
+        self.assertIn("::rustorb_core::idl::SharedOctets", text)
+        self.assertIn("v: &Blob", text)
+        self.assertIn("both: &mut ::rustorb_core::Octets", text)
+        self.assertNotIn("v: &[u8]", text)
+        # Without the option, the same IDL maps to Vec<u8>.
+        plain = os.path.join(OUT, "unshared")
+        self.assertEqual(cli.main(["-brust", "-C", plain, path]), 0)
+        text = read(os.path.join(plain, "shared_octets.rs"))
+        self.assertIn("pub type Blob = ::std::vec::Vec<u8>;", text)
+        self.assertNotIn("idl::SharedOctets", text)
+        # Not for the DDS output.
+        for dds in ("-Wbdds", "-Wbdds_only"):
+            self.assertEqual(cli.main(["-brust", "-Wbshared_octets", dds, "-C", OUT, path]), 2)
+        self.assertEqual(cli.main(["-bpython", "-Wbshared_octets", "-C", OUT, path]), 2)
+
     def test_options(self):
         path = os.path.join(INTEROP_IDL, "InteropTest.idl")
         self.assertEqual(cli.main(["-brust", "-Wbextern=AnyTest", "-C", OUT, path]), 2)
